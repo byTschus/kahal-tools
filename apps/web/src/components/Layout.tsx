@@ -20,7 +20,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await api.post('/auth/logout');
-    window.location.href = '/login';
+    window.location.href = `/login/${me.tenant.slug}`;
   };
 
   return (

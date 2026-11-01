@@ -8,6 +8,14 @@ export interface PlanningTokens {
   refreshToken?: string;
   /** Ablaufzeitpunkt (ms seit Epoch) */
   expiresAt?: number;
+  /** Client ID der OAuth-App, die das Token ausgestellt hat (für die Erneuerung) */
+  clientId?: string;
+}
+
+/** Client ID + Secret einer OAuth-App (pro Gemeinde oder global aus der .env) */
+export interface OAuthAppCreds {
+  clientId: string;
+  clientSecret: string;
 }
 
 export interface PlanningIdentity {
@@ -63,9 +71,10 @@ export interface PlanningClient {
 export interface PlanningProvider {
   key: string;
   label: string;
-  isConfigured(): boolean;
-  getAuthorizeUrl(state: string, redirectUri: string): string;
-  exchangeCode(code: string, redirectUri: string): Promise<PlanningTokens>;
-  refresh(tokens: PlanningTokens): Promise<PlanningTokens>;
+  /** false = braucht keine OAuth-App (z.B. Demo-Provider) */
+  requiresApp: boolean;
+  getAuthorizeUrl(state: string, redirectUri: string, app: OAuthAppCreds | null): string;
+  exchangeCode(code: string, redirectUri: string, app: OAuthAppCreds | null): Promise<PlanningTokens>;
+  refresh(tokens: PlanningTokens, app: OAuthAppCreds | null): Promise<PlanningTokens>;
   createClient(tokens: PlanningTokens): PlanningClient;
 }

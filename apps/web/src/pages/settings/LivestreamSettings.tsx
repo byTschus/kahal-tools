@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
+import { OAuthAppCard, type OAuthAppStatus } from '../../components/OAuthAppCard';
 import { SamplePlanSelect, TemplateField, useSamplePlan } from '../../components/TemplateField';
 import { Alert, Avatar, Button, Card, Checkbox, ConfirmButton, Field, Spinner } from '../../components/ui';
 import { api, useApi } from '../../lib/api';
@@ -24,11 +25,37 @@ export function LivestreamSettings() {
   const { data: options } = useApi<{ streamKeys: { id: string; name: string }[]; playlists: { id: string; name: string }[] }>(
     connected ? '/api/integrations/streaming/options' : null,
   );
+  const { data: apps, reload: reloadApps } = useApi<{ youtube: OAuthAppStatus }>('/api/oauth-apps');
   const s = useSettings<LivestreamSettingsData>('livestream');
   const sample = useSamplePlan();
 
   return (
     <>
+      {apps && (
+        <OAuthAppCard
+          provider="youtube"
+          title="Google / YouTube API-Zugangsdaten"
+          status={apps.youtube}
+          onChanged={reloadApps}
+          warning="Nach einer Änderung der Zugangsdaten muss YouTube unten neu verbunden werden."
+          instructions={
+            <ol style={{ paddingLeft: 20, margin: 0 }}>
+              <li>
+                <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer">Google Cloud Console</a> → neues Projekt anlegen.
+              </li>
+              <li>
+                APIs &amp; Dienste → Bibliothek → <b>YouTube Data API v3</b> aktivieren.
+              </li>
+              <li>
+                OAuth-Zustimmungsbildschirm: Typ „Extern“, Bereich <code>…/auth/youtube</code>, danach <b>App veröffentlichen</b> („In Produktion“) – sonst läuft die
+                Verbindung nach 7 Tagen ab.
+              </li>
+              <li>Anmeldedaten → OAuth-Client-ID → „Webanwendung“, die Redirect-URL unten als „Autorisierte Weiterleitungs-URI“ eintragen.</li>
+              <li>Client-ID und Clientschlüssel hier eintragen und speichern.</li>
+            </ol>
+          }
+        />
+      )}
       <Card title="Streaming-Plattform">
         {params.get('connected') && <Alert kind="success">YouTube wurde erfolgreich verbunden.</Alert>}
         <Alert>{params.get('error')}</Alert>
@@ -64,13 +91,13 @@ export function LivestreamSettings() {
           <div className="stack">
             <p className="muted">Verbinde den YouTube-Kanal der Gemeinde. Du wirst zu Google weitergeleitet und musst den Zugriff erlauben.</p>
             {integrations.available.streaming.map((p) =>
-              p.configured ? (
+              apps?.youtube.source ? (
                 <a key={p.key} className="btn primary" href={`/api/integrations/streaming/${p.key}/connect`} style={{ alignSelf: 'flex-start' }}>
                   Mit {p.label} verbinden
                 </a>
               ) : (
                 <Alert key={p.key} kind="warning">
-                  {p.label} ist auf dem Server noch nicht eingerichtet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET, siehe docs/SETUP.md).
+                  Bitte zuerst oben die {p.label}-API-Zugangsdaten eintragen.
                 </Alert>
               ),
             )}

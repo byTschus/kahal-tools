@@ -94,7 +94,7 @@ export interface Integrations {
   streaming: { provider: string; label: string; config: { accountName?: string; avatarUrl?: string } } | null;
   podcastHost: { provider: string; config: Record<string, any>; secretsSet: Record<string, boolean> } | null;
   available: {
-    streaming: { key: string; label: string; configured: boolean }[];
+    streaming: { key: string; label: string; globalApp: boolean }[];
     podcastHost: { key: string; label: string; fields: HostField[] }[];
   };
   feedUrl: string;

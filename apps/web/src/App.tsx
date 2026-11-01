@@ -8,7 +8,7 @@ import { setTimeZone } from './lib/format';
 import type { Me } from './lib/types';
 import { Dashboard } from './pages/Dashboard';
 import { LivestreamPage } from './pages/LivestreamPage';
-import { LoginPage, PendingPage } from './pages/Login';
+import { LoginPage, PendingPage, SetupPage, rememberTenant } from './pages/Login';
 import { PodcastCreatePage } from './pages/PodcastCreatePage';
 import { PodcastPage } from './pages/PodcastPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
@@ -16,14 +16,23 @@ import { VisitorsPage } from './pages/VisitorsPage';
 
 export function App() {
   const location = useLocation();
-  const isPublic = location.pathname === '/login';
+  const isPublic = location.pathname === '/login' || location.pathname.startsWith('/login/') || location.pathname === '/setup';
   const { data: me, error, loading, reload } = useApi<Me>(isPublic ? null : '/api/me');
 
   useEffect(() => {
-    if (me) setTimeZone(me.tenant.timeZone);
+    if (me) {
+      setTimeZone(me.tenant.timeZone);
+      rememberTenant(me.tenant.slug);
+    }
   }, [me]);
 
-  if (isPublic) return <LoginPage />;
+  if (isPublic)
+    return (
+      <Routes>
+        <Route path="/setup" element={<SetupPage />} />
+        <Route path="/login/:slug?" element={<LoginPage />} />
+      </Routes>
+    );
   if (loading && !me) return <Spinner />;
   if (error?.status === 401 || !me) return <Navigate to="/login" replace />;
   if (me.user.status !== 'active') return <PendingPage me={me} />;

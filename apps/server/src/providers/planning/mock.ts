@@ -101,7 +101,7 @@ class MockClient implements PlanningClient {
 export const mockProvider: PlanningProvider = {
   key: 'mock',
   label: 'Demo (lokal)',
-  isConfigured: () => true,
+  requiresApp: false,
   getAuthorizeUrl: (state) => `/auth/mock/choose?state=${encodeURIComponent(state)}`,
   exchangeCode: async (code) => ({ accessToken: `mock:${code}`, expiresAt: Date.now() + 365 * 86400_000 }),
   refresh: async (tokens) => tokens,

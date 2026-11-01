@@ -18,6 +18,7 @@
 
 ## Login & Benutzer
 
+0. OAuth-App-Zugangsdaten (Client ID/Secret) liegen **pro Gemeinde** verschlüsselt in der Tabelle `OAuthApp` (`services/oauthApps.ts`). Neue Gemeinde: „Gemeinde einrichten“ – die eingegebenen Zugangsdaten reisen verschlüsselt im OAuth-State mit und werden nach erfolgreichem Login gespeichert. Bestehende Gemeinde: Login-Link `/login/<slug>` → `/auth/pco/login?tenant=<slug>`. Fallback: globale App aus der `.env`. Jedes Token merkt sich die `clientId` der ausstellenden App, damit es mit der richtigen App erneuert wird.
 1. „Mit Planning Center anmelden“ → OAuth → `/auth/pco/callback`
 2. Organisation + Person werden abgefragt (`/people/v2`, `/people/v2/me`)
 3. Neue Organisation → Tenant + Admin. Bekannte Organisation → eingeladene Person wird aktiv, unbekannte Person wird `pending` (Zugangsanfrage).

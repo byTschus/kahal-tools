@@ -1,6 +1,6 @@
-import { config } from '../../config.js';
 import { fetchJson, HttpError } from '../../lib/http.js';
 import type {
+  OAuthAppCreds,
   PlanningClient,
   PlanningEventDetail,
   PlanningEventSummary,
@@ -29,22 +29,28 @@ interface JsonApiDoc {
   links?: { next?: string };
 }
 
-function tokenResponse(body: any): PlanningTokens {
+function tokenResponse(body: any, app: OAuthAppCreds): PlanningTokens {
   return {
     accessToken: body.access_token,
     refreshToken: body.refresh_token,
     expiresAt: Date.now() + (Number(body.expires_in ?? 7200) - 60) * 1000,
+    clientId: app.clientId,
   };
+}
+
+function requireApp(app: OAuthAppCreds | null): OAuthAppCreds {
+  if (!app) throw new HttpError(400, 'Für Planning Center sind keine OAuth-Zugangsdaten hinterlegt', 'no-app');
+  return app;
 }
 
 export const pcoProvider: PlanningProvider = {
   key: 'pco',
   label: 'Planning Center',
-  isConfigured: () => Boolean(config.pco.clientId && config.pco.clientSecret),
+  requiresApp: true,
 
-  getAuthorizeUrl(state, redirectUri) {
+  getAuthorizeUrl(state, redirectUri, app) {
     const params = new URLSearchParams({
-      client_id: config.pco.clientId,
+      client_id: requireApp(app).clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: SCOPES,
@@ -53,7 +59,8 @@ export const pcoProvider: PlanningProvider = {
     return `${API}/oauth/authorize?${params}`;
   },
 
-  async exchangeCode(code, redirectUri) {
+  async exchangeCode(code, redirectUri, maybeApp) {
+    const app = requireApp(maybeApp);
     const body = await fetchJson(`${API}/oauth/token`, {
       service: 'Planning Center',
       method: 'POST',
@@ -61,15 +68,17 @@ export const pcoProvider: PlanningProvider = {
       body: JSON.stringify({
         grant_type: 'authorization_code',
         code,
-        client_id: config.pco.clientId,
-        client_secret: config.pco.clientSecret,
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
         redirect_uri: redirectUri,
       }),
     });
-    return tokenResponse(body);
+    return tokenResponse(body, app);
   },
 
-  async refresh(tokens) {
+  async refresh(tokens, maybeApp) {
+    const app = maybeApp;
+    if (!app) throw new HttpError(401, 'Planning Center: Zugangsdaten wurden geändert, bitte neu anmelden', 'reauth');
     if (!tokens.refreshToken) throw new HttpError(401, 'Planning Center: Sitzung abgelaufen, bitte neu anmelden', 'reauth');
     const body = await fetchJson(`${API}/oauth/token`, {
       service: 'Planning Center',
@@ -78,11 +87,11 @@ export const pcoProvider: PlanningProvider = {
       body: JSON.stringify({
         grant_type: 'refresh_token',
         refresh_token: tokens.refreshToken,
-        client_id: config.pco.clientId,
-        client_secret: config.pco.clientSecret,
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
       }),
     });
-    return tokenResponse(body);
+    return tokenResponse(body, app);
   },
 
   createClient(tokens) {

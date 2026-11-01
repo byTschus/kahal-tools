@@ -10,6 +10,7 @@ Webtool, das technische Aufgaben in der Gemeinde vereinfacht – verknüpft mit 
 | ⚙️ **Einstellungen** | Benutzer & Gruppen mit Rechten pro Tool, Einladungen aus PCO, alle Tool-Einstellungen. |
 
 **Anmeldung:** mit dem Planning-Center-Login. Die Gemeinde wird automatisch erkannt; die erste Person einer Gemeinde wird Administrator. Weitere Personen werden eingeladen oder stellen beim ersten Login eine Zugangsanfrage.
+Jede Gemeinde hinterlegt ihre eigenen Planning-Center- und Google/YouTube-Zugangsdaten (Client ID / Secret) direkt im Webinterface und erhält einen eigenen Login-Link.
 
 👉 **Einrichtung Schritt für Schritt: [docs/SETUP.md](docs/SETUP.md)**
 👉 Aufbau & Erweiterung: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

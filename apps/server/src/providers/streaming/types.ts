@@ -7,6 +7,13 @@ export interface StreamingSecrets {
   accessToken: string;
   refreshToken?: string;
   expiresAt?: number;
+  /** Client ID der OAuth-App, die das Token ausgestellt hat */
+  clientId?: string;
+}
+
+export interface OAuthAppCreds {
+  clientId: string;
+  clientSecret: string;
 }
 
 export type BroadcastStatus = 'upcoming' | 'live' | 'completed';
@@ -58,11 +65,13 @@ export interface StreamingClient {
 export interface StreamingProvider {
   key: string;
   label: string;
-  isConfigured(): boolean;
-  getAuthorizeUrl(state: string, redirectUri: string): string;
-  exchangeCode(code: string, redirectUri: string): Promise<StreamingSecrets>;
-  /** onTokens wird aufgerufen, wenn Tokens erneuert wurden (zum Speichern) */
-  createClient(secrets: StreamingSecrets, onTokens: (s: StreamingSecrets) => Promise<void>): StreamingClient;
+  getAuthorizeUrl(state: string, redirectUri: string, app: OAuthAppCreds): string;
+  exchangeCode(code: string, redirectUri: string, app: OAuthAppCreds): Promise<StreamingSecrets>;
+  /**
+   * app = OAuth-App, die das Token ausgestellt hat (null, falls nicht mehr vorhanden -> neu verbinden).
+   * onTokens wird aufgerufen, wenn Tokens erneuert wurden (zum Speichern).
+   */
+  createClient(secrets: StreamingSecrets, app: OAuthAppCreds | null, onTokens: (s: StreamingSecrets) => Promise<void>): StreamingClient;
   /** Öffentliche URL eines Videos (z.B. für den Podcast-Download) */
   videoUrl(id: string): string;
 }

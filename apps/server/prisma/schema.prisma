@@ -33,8 +33,24 @@ model Tenant {
   jobs           Job[]
   visitorPlaces  VisitorLocation[]
   visitorCounts  VisitorCount[]
+  oauthApps      OAuthApp[]
 
   @@unique([planningProvider, externalOrgId])
+}
+
+/// Eigene OAuth-App-Zugangsdaten einer Gemeinde (z.B. Planning Center, Google/YouTube).
+/// Ohne Eintrag werden die globalen Werte aus der .env verwendet (falls gesetzt).
+model OAuthApp {
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// pco | youtube | ...
+  provider     String
+  clientId     String   @db.VarChar(512)
+  /// Verschlüsselt
+  clientSecret String   @db.Text
+  updatedAt    DateTime @updatedAt
+
+  @@id([tenantId, provider])
 }
 
 model User {

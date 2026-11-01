@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { requirePerm, requireUser, tid } from '../auth/middleware.js';
 import { config } from '../config.js';
@@ -8,12 +8,13 @@ import { HttpError } from '../lib/http.js';
 import { consumeOAuthState, createOAuthState } from '../lib/session.js';
 import { getPodcastHost, listPodcastHosts, type HostConfig } from '../providers/podcastHost/index.js';
 import { getStreamingProvider, listStreamingProviders } from '../providers/streaming/index.js';
+import { can } from '../permissions.js';
 import { getIntegration, requireStreaming } from '../services/integrations.js';
+import { appStatus, deleteTenantApp, redirectUriFor, resolveApp, saveTenantApp } from '../services/oauthApps.js';
 import { feedUrl } from '../services/podcasts.js';
 
 export const integrationsRouter = Router();
 
-const streamingRedirect = (provider: string) => `${config.appUrl}/api/integrations/streaming/${provider}/callback`;
 
 integrationsRouter.get('/api/integrations', requireUser, async (req, res) => {
   const tenantId = tid(req);
@@ -40,9 +41,13 @@ integrationsRouter.get('/api/integrations', requireUser, async (req, res) => {
 
 integrationsRouter.get('/api/integrations/streaming/:provider/connect', requirePerm('livestream', 'settings'), async (req, res) => {
   const provider = getStreamingProvider(String(req.params.provider));
-  if (!provider.isConfigured()) throw new HttpError(400, `${provider.label} ist auf dem Server noch nicht konfiguriert (siehe docs/SETUP.md)`);
+  const app = await resolveApp(tid(req), provider.key);
+  if (!app) {
+    res.redirect(`/settings/livestream?error=${encodeURIComponent(`Bitte zuerst die ${provider.label}-API-Zugangsdaten (Client ID / Secret) eintragen.`)}`);
+    return;
+  }
   const state = await createOAuthState(res, { purpose: 'streaming', provider: provider.key, tenantId: tid(req) });
-  res.redirect(provider.getAuthorizeUrl(state, streamingRedirect(provider.key)));
+  res.redirect(provider.getAuthorizeUrl(state, redirectUriFor(provider.key), app));
 });
 
 integrationsRouter.get('/api/integrations/streaming/:provider/callback', requirePerm('livestream', 'settings'), async (req, res) => {
@@ -53,8 +58,10 @@ integrationsRouter.get('/api/integrations/streaming/:provider/callback', require
     const provider = getStreamingProvider(String(req.params.provider));
     if (state.purpose !== 'streaming' || state.tenantId !== tid(req) || state.provider !== provider.key) throw new Error('Ungültiger Status');
 
-    const secrets = await provider.exchangeCode(String(req.query.code ?? ''), streamingRedirect(provider.key));
-    const account = await provider.createClient(secrets, async () => {}).getAccount();
+    const app = await resolveApp(tid(req), provider.key);
+    if (!app) throw new Error('Zugangsdaten fehlen');
+    const secrets = await provider.exchangeCode(String(req.query.code ?? ''), redirectUriFor(provider.key), app);
+    const account = await provider.createClient(secrets, app, async () => {}).getAccount();
     const data = {
       provider: provider.key,
       label: account.name,
@@ -128,4 +135,46 @@ integrationsRouter.post('/api/integrations/podcastHost/test', requirePerm('podca
 integrationsRouter.delete('/api/integrations/podcastHost', requirePerm('podcast', 'settings'), async (req, res) => {
   await prisma.integration.deleteMany({ where: { tenantId: tid(req), kind: 'podcastHost' } });
   res.json({ ok: true });
+});
+
+// ----- Eigene OAuth-App-Zugangsdaten der Gemeinde (Planning Center, Google/YouTube) -----
+
+/** Wer darf welche Zugangsdaten verwalten? pco: Admins; youtube: Livestream-Einstellungen */
+function checkAppAccess(req: Request, provider: string) {
+  if (provider === 'pco') {
+    if (!req.user!.isAdmin) throw new HttpError(403, 'Nur für Administratoren');
+  } else if (provider === 'youtube') {
+    if (!can(req.perms!, 'livestream', 'settings')) throw new HttpError(403, 'Keine Berechtigung');
+  } else {
+    throw new HttpError(404, 'Unbekannter Anbieter');
+  }
+}
+
+integrationsRouter.get('/api/oauth-apps', requireUser, async (req, res) => {
+  const tenant = req.user!.tenant;
+  res.json({
+    pco: await appStatus(tenant.id, 'pco'),
+    youtube: await appStatus(tenant.id, 'youtube'),
+    loginUrl: `${config.appUrl}/login/${tenant.slug}`,
+  });
+});
+
+const appSchema = z.object({ clientId: z.string().trim().min(10, 'Client ID fehlt'), clientSecret: z.string().optional() });
+
+integrationsRouter.put('/api/oauth-apps/:provider', requireUser, async (req, res) => {
+  const provider = String(req.params.provider);
+  checkAppAccess(req, provider);
+  const body = appSchema.parse(req.body);
+  await saveTenantApp(tid(req), provider, body.clientId, body.clientSecret);
+  res.json(await appStatus(tid(req), provider));
+});
+
+integrationsRouter.delete('/api/oauth-apps/:provider', requireUser, async (req, res) => {
+  const provider = String(req.params.provider);
+  checkAppAccess(req, provider);
+  if (provider === 'pco' && !(await resolveApp(null, 'pco'))) {
+    throw new HttpError(400, 'Ohne eigene Planning-Center-Zugangsdaten könnte sich niemand mehr anmelden');
+  }
+  await deleteTenantApp(tid(req), provider);
+  res.json(await appStatus(tid(req), provider));
 });

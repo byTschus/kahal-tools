@@ -3,6 +3,7 @@ import { decryptJson, encryptJson } from '../lib/crypto.js';
 import { HttpError } from '../lib/http.js';
 import { getPodcastHost, type HostConfig } from '../providers/podcastHost/index.js';
 import { getStreamingProvider, type StreamingSecrets } from '../providers/streaming/index.js';
+import { appForClientId } from './oauthApps.js';
 
 export type IntegrationKind = 'streaming' | 'podcastHost';
 
@@ -17,7 +18,8 @@ export async function streamingFor(tenantId: string) {
   const provider = getStreamingProvider(integration.provider);
   const secrets = decryptJson<StreamingSecrets>(integration.secrets);
   if (!secrets) return null;
-  const client = provider.createClient(secrets, async (updated) => {
+  const app = await appForClientId(tenantId, provider.key, secrets.clientId);
+  const client = provider.createClient(secrets, app, async (updated) => {
     await prisma.integration.update({ where: { id: integration.id }, data: { secrets: encryptJson(updated) } });
   });
   return { integration, provider, client };

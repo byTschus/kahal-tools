@@ -1,6 +1,5 @@
-import { config } from '../../config.js';
 import { fetchJson, HttpError } from '../../lib/http.js';
-import type { Broadcast, BroadcastInput, BroadcastStatus, StreamingClient, StreamingProvider, StreamingSecrets, VideoStats } from './types.js';
+import type { Broadcast, BroadcastInput, BroadcastStatus, OAuthAppCreds, StreamingClient, StreamingProvider, StreamingSecrets, VideoStats } from './types.js';
 
 /**
  * YouTube Data API v3 (https://developers.google.com/youtube/v3/live)
@@ -12,11 +11,9 @@ const SCOPE = 'https://www.googleapis.com/auth/youtube';
 export const youtubeProvider: StreamingProvider = {
   key: 'youtube',
   label: 'YouTube',
-  isConfigured: () => Boolean(config.google.clientId && config.google.clientSecret),
-
-  getAuthorizeUrl(state, redirectUri) {
+  getAuthorizeUrl(state, redirectUri, app) {
     const params = new URLSearchParams({
-      client_id: config.google.clientId,
+      client_id: app.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: SCOPE,
@@ -28,15 +25,15 @@ export const youtubeProvider: StreamingProvider = {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   },
 
-  async exchangeCode(code, redirectUri) {
+  async exchangeCode(code, redirectUri, app) {
     const body = await fetchJson('https://oauth2.googleapis.com/token', {
       service: 'Google',
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: config.google.clientId,
-        client_secret: config.google.clientSecret,
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }),
@@ -45,10 +42,11 @@ export const youtubeProvider: StreamingProvider = {
       accessToken: body.access_token,
       refreshToken: body.refresh_token,
       expiresAt: Date.now() + (Number(body.expires_in ?? 3600) - 60) * 1000,
+      clientId: app.clientId,
     };
   },
 
-  createClient: (secrets, onTokens) => new YouTubeClient(secrets, onTokens),
+  createClient: (secrets, app, onTokens) => new YouTubeClient(secrets, app, onTokens),
   videoUrl: (id) => `https://www.youtube.com/watch?v=${id}`,
 };
 
@@ -90,12 +88,13 @@ export function parseDuration(iso?: string): number | undefined {
 class YouTubeClient implements StreamingClient {
   constructor(
     private secrets: StreamingSecrets,
+    private app: OAuthAppCreds | null,
     private onTokens: (s: StreamingSecrets) => Promise<void>,
   ) {}
 
   private async token(): Promise<string> {
     if (this.secrets.expiresAt && this.secrets.expiresAt > Date.now()) return this.secrets.accessToken;
-    if (!this.secrets.refreshToken) throw new HttpError(400, 'YouTube-Verbindung abgelaufen – bitte in den Einstellungen neu verbinden', 'reconnect');
+    if (!this.secrets.refreshToken || !this.app) throw new HttpError(400, 'YouTube-Verbindung abgelaufen – bitte in den Einstellungen neu verbinden', 'reconnect');
     try {
       const body = await fetchJson('https://oauth2.googleapis.com/token', {
         service: 'Google',
@@ -103,8 +102,8 @@ class YouTubeClient implements StreamingClient {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           refresh_token: this.secrets.refreshToken,
-          client_id: config.google.clientId,
-          client_secret: config.google.clientSecret,
+          client_id: this.app.clientId,
+          client_secret: this.app.clientSecret,
           grant_type: 'refresh_token',
         }),
       });
@@ -112,6 +111,7 @@ class YouTubeClient implements StreamingClient {
         accessToken: body.access_token,
         refreshToken: body.refresh_token ?? this.secrets.refreshToken,
         expiresAt: Date.now() + (Number(body.expires_in ?? 3600) - 60) * 1000,
+        clientId: this.app.clientId,
       };
       await this.onTokens(this.secrets);
       return this.secrets.accessToken;

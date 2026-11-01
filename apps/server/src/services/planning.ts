@@ -2,6 +2,7 @@ import type { User } from '@prisma/client';
 import { prisma } from '../db.js';
 import { decryptJson, encryptJson } from '../lib/crypto.js';
 import { HttpError } from '../lib/http.js';
+import { appForClientId } from './oauthApps.js';
 import { getPlanningProvider, type PlanningClient, type PlanningEventDetail, type PlanningTokens } from '../providers/planning/index.js';
 
 /**
@@ -13,7 +14,8 @@ export async function planningClientFor(user: User & { tenant: { planningProvide
   let tokens = decryptJson<PlanningTokens>(user.planningAuth);
   if (!tokens) throw new HttpError(401, 'Bitte neu anmelden, um auf das Planungstool zuzugreifen', 'reauth');
   if (tokens.expiresAt && tokens.expiresAt < Date.now() + 30_000) {
-    tokens = await provider.refresh(tokens);
+    const app = provider.requiresApp ? await appForClientId(user.tenantId, provider.key, tokens.clientId) : null;
+    tokens = await provider.refresh(tokens, app);
     await prisma.user.update({ where: { id: user.id }, data: { planningAuth: encryptJson(tokens) } });
   }
   return provider.createClient(tokens);

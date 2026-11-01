@@ -4,8 +4,8 @@ Diese Anleitung beschreibt alles, was **von Hand** gemacht werden muss. Reihenfo
 
 1. [GitHub-Repository anlegen und Code hochladen](#1-github-repository)
 2. [Lokale Entwicklungsumgebung (VS Code + Docker)](#2-lokale-entwicklungsumgebung)
-3. [Planning Center: OAuth-App registrieren](#3-planning-center-oauth-app)
-4. [Google / YouTube: API-Zugang einrichten](#4-google--youtube-api)
+3. [Planning Center: OAuth-App pro Gemeinde](#3-planning-center-oauth-app-pro-gemeinde)
+4. [Google / YouTube: API-Zugang pro Gemeinde](#4-google--youtube-api-pro-gemeinde)
 5. [Infomaniak: Node.js-Hosting + Datenbank](#5-infomaniak-nodejs-hosting)
 6. [Infomaniak Public Cloud: Podcast-Worker](#6-infomaniak-public-cloud-podcast-worker)
 7. [Erste Schritte im Tool](#7-erste-schritte-im-tool)
@@ -83,49 +83,54 @@ Trage die Zugangsdaten aus Schritt 3 und 4 in die `.env` ein und registriere zus
 
 ---
 
-## 3. Planning Center: OAuth-App
+## 3. Planning Center: OAuth-App pro Gemeinde
 
-1. Mit einem Planning-Center-Konto anmelden und <https://api.planningcenteronline.com/oauth/applications> öffnen.
-2. **New Application** → Name `kahal.tools`, optional Beschreibung/Logo.
-3. **Callback URLs / Redirect URIs** – beide eintragen:
-   * `https://tools.deine-domain.ch/auth/pco/callback`
-   * `http://localhost:5173/auth/pco/callback` (für die lokale Entwicklung)
-4. Speichern. Kopiere **Client ID** und **Secret** in die `.env`:
+Jede Gemeinde verwendet **ihre eigene** Planning-Center-OAuth-App. Die Zugangsdaten werden **im Webinterface** eingegeben und verschlüsselt pro Gemeinde gespeichert – auf dem Server muss dafür nichts konfiguriert werden.
 
-   ```
-   PCO_CLIENT_ID=...
-   PCO_CLIENT_SECRET=...
-   ```
+### Neue Gemeinde einrichten (einmalig, durch die erste Person der Gemeinde)
+
+1. kahal.tools öffnen → **„Neue Gemeinde einrichten“**.
+2. In einem neuen Tab mit dem Planning-Center-Konto anmelden und <https://api.planningcenteronline.com/oauth/applications> öffnen.
+3. **New Application** → Name `kahal.tools` (optional Beschreibung/Logo).
+4. Als **Callback URL / Redirect URI** die Adresse eintragen, die auf der Einrichtungsseite angezeigt wird:
+   `https://tools.deine-domain.ch/auth/pco/callback`
+   (für die lokale Entwicklung zusätzlich `http://localhost:5173/auth/pco/callback`)
+5. Speichern, **Client ID** und **Secret** in kahal.tools eintragen → **Weiter zur Anmeldung bei Planning Center** → Zugriff erlauben.
+6. Die Gemeinde wird anhand des PCO-Kontos erkannt und angelegt, du bist **Administrator**.
+
+Danach findest du unter **Einstellungen → Planungstool** den **Login-Link der Gemeinde** (`https://tools.deine-domain.ch/login/<kürzel>`). Diesen an alle Mitarbeitenden weitergeben – darüber melden sie sich mit ihrem eigenen PCO-Konto an. Dort lassen sich die Zugangsdaten auch später ändern.
 
 Benötigte Rechte (werden beim Login abgefragt): `people` (Person & Gemeinde erkennen, Personen zum Einladen suchen) und `services` (Pläne, Teams, Items).
 
-> Diese eine App funktioniert für **alle** Gemeinden. Jede Person meldet sich mit ihrem eigenen PCO-Konto an; das Tool erkennt die Gemeinde automatisch.
+> **Schutz:** Wer sich über den Login-Link einer Gemeinde anmeldet, muss in Planning Center auch zu dieser Organisation gehören. Ist eine Gemeinde bereits eingerichtet, kann nur ein Administrator ihre Zugangsdaten ändern.
+
+> **Optional – globale App:** Wer kahal.tools für viele Gemeinden betreibt, kann stattdessen *eine* App in der Server-`.env` hinterlegen (`PCO_CLIENT_ID` / `PCO_CLIENT_SECRET`). Sie gilt für alle Gemeinden ohne eigene Zugangsdaten; auf der Login-Seite erscheint dann zusätzlich „Mit Planning Center anmelden (ohne Kürzel)“.
 
 ---
 
-## 4. Google / YouTube API
+## 4. Google / YouTube API pro Gemeinde
 
-1. <https://console.cloud.google.com> öffnen → oben **Projekt auswählen → Neues Projekt** → Name `kahal-tools` → Erstellen.
+Auch die Google-Zugangsdaten werden pro Gemeinde im Webinterface eingetragen: **Einstellungen → Livestream → Google / YouTube API-Zugangsdaten** (dort steht die Anleitung auch noch einmal).
+
+1. <https://console.cloud.google.com> öffnen → **Projekt auswählen → Neues Projekt** → Name `kahal-tools` → Erstellen.
 2. **APIs & Dienste → Bibliothek** → „**YouTube Data API v3**“ suchen → **Aktivieren**.
 3. **APIs & Dienste → OAuth-Zustimmungsbildschirm** (bzw. „Google Auth Platform“):
    * Nutzertyp **Extern**, App-Name `kahal.tools`, Support-E-Mail, Kontakt-E-Mail.
    * **Datenzugriff / Bereiche:** `https://www.googleapis.com/auth/youtube` hinzufügen.
-   * **Zielgruppe / Testnutzer:** die Google-Konten eintragen, die YouTube verbinden werden.
 4. **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID**:
    * Anwendungstyp **Webanwendung**
-   * **Autorisierte Weiterleitungs-URIs:**
-     * `https://tools.deine-domain.ch/api/integrations/streaming/youtube/callback`
-     * `http://localhost:5173/api/integrations/streaming/youtube/callback`
-5. **Client-ID** und **Clientschlüssel** in die `.env`:
+   * **Autorisierte Weiterleitungs-URI:** die in kahal.tools angezeigte Adresse, also
+     `https://tools.deine-domain.ch/api/integrations/streaming/youtube/callback`
+     (lokal zusätzlich `http://localhost:5173/api/integrations/streaming/youtube/callback`)
+5. **Client-ID** und **Clientschlüssel** in kahal.tools eintragen → **Zugangsdaten speichern** → **Mit YouTube verbinden** (mit dem Google-Konto, das den Kanal verwaltet).
 
-   ```
-   GOOGLE_CLIENT_ID=...
-   GOOGLE_CLIENT_SECRET=...
-   ```
+> ⚠️ **Wichtig – App veröffentlichen:** Solange die Google-App im Status „Testing“ ist, laufen die Tokens **nach 7 Tagen ab** und YouTube muss neu verbunden werden. Unter **Zielgruppe → App veröffentlichen** auf „In Produktion“ stellen. Ohne Google-Verifizierung erscheint beim Verbinden ein Warnhinweis („Google hat diese App nicht überprüft“) → **Erweitert → Weiter zu kahal.tools**. Für den Eigengebrauch einer Gemeinde ist das in Ordnung.
 
-> ⚠️ **Wichtig – App veröffentlichen:** Solange die App im Status „Testing“ ist, laufen die Google-Tokens **nach 7 Tagen ab** und YouTube muss neu verbunden werden. Unter **Zielgruppe → App veröffentlichen** auf „In Produktion“ stellen. Ohne Google-Verifizierung erscheint beim Verbinden ein Warnhinweis („Google hat diese App nicht überprüft“) → **Erweitert → Weiter zu kahal.tools**. Das ist für den Eigengebrauch in Ordnung (bis 100 Nutzer). Für viele Gemeinden später die Verifizierung bei Google beantragen.
+> **Kontingent:** 10'000 Einheiten pro Tag und Google-Projekt (Livestream erstellen ≈ 50–100, Liste abrufen = 1). Da jede Gemeinde ihr eigenes Google-Projekt hat, teilen sich die Gemeinden das Kontingent nicht.
 
-> **Kontingent:** Die YouTube-API erlaubt 10'000 Einheiten pro Tag und Google-Projekt (Livestream erstellen ≈ 50–100, Liste abrufen = 1). Für einige Gemeinden reicht das gut. Bei vielen Gemeinden in der Google Console unter „Kontingente“ eine Erhöhung beantragen.
+> **Optional – globale App:** `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in der Server-`.env` gelten für alle Gemeinden ohne eigene Zugangsdaten.
+
+> Werden Zugangsdaten geändert, müssen sich Benutzer (PCO) einmal neu anmelden bzw. YouTube neu verbunden werden.
 
 ---
 
@@ -188,10 +193,7 @@ DATABASE_URL=mysql://BENUTZER:PASSWORT@HOST:3306/DATENBANK
 SESSION_SECRET=...                 # zufällig, mind. 32 Zeichen
 ENCRYPTION_KEY=...                 # zufällig, mind. 32 Zeichen – NIE mehr ändern!
 WORKER_TOKEN=...                   # zufällig, mind. 32 Zeichen – gleicher Wert beim Worker
-PCO_CLIENT_ID=...
-PCO_CLIENT_SECRET=...
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
+# PCO_/GOOGLE_CLIENT_ID/SECRET leer lassen – die Gemeinden tragen ihre eigenen im Webinterface ein
 ENABLE_MOCK_PLANNING=false
 RUN_SCHEDULER=true
 ```
@@ -266,9 +268,9 @@ Der Container startet nach einem Neustart der Instanz automatisch wieder und akt
 
 ## 7. Erste Schritte im Tool
 
-1. <https://tools.deine-domain.ch> öffnen → **Mit Planning Center anmelden**. Du bist als erste Person deiner Gemeinde automatisch **Administrator**.
-2. **Einstellungen → Planungstool:** Service Types auswählen, die in den Tools erscheinen sollen.
-3. **Einstellungen → Livestream:** **Mit YouTube verbinden** (mit dem Google-Konto, das den Kanal verwaltet). Danach Vorlagen, Startzeit-Item (z.B. „Livestream“), Streamschlüssel und Playlist einstellen.
+1. <https://tools.deine-domain.ch> öffnen → **Neue Gemeinde einrichten** (siehe [Abschnitt 3](#3-planning-center-oauth-app-pro-gemeinde)). Du bist als erste Person deiner Gemeinde automatisch **Administrator**.
+2. **Einstellungen → Planungstool:** Login-Link der Gemeinde kopieren und weitergeben, Service Types auswählen.
+3. **Einstellungen → Livestream:** Google-Zugangsdaten eintragen ([Abschnitt 4](#4-google--youtube-api-pro-gemeinde)), dann **Mit YouTube verbinden**. Danach Vorlagen, Startzeit-Item (z.B. „Livestream“), Streamschlüssel und Playlist einstellen.
    * Der **Streamschlüssel** sorgt dafür, dass OBS/der Encoder immer an denselben Schlüssel sendet; neue Livestreams werden automatisch damit verbunden.
 4. **Einstellungen → Podcast:** FTP-Daten eintragen → **Verbindung testen** → Vorlagen und Feed-Angaben ausfüllen.
 5. **Einstellungen → Besucherzähler:** Orte anlegen (Saal EG, Saal OG, …), Livestream-Zählung einstellen.
@@ -316,8 +318,11 @@ cd apps/worker && docker compose up -d --build
 
 | Problem | Lösung |
 | --- | --- |
-| Login: „Planning Center ist auf dem Server noch nicht konfiguriert“ | `PCO_CLIENT_ID` / `PCO_CLIENT_SECRET` in der `.env` fehlen → eintragen und neu starten. |
-| Login: „redirect_uri mismatch“ | Die Callback-URL in der PCO-/Google-App muss **exakt** `APP_URL` + Pfad entsprechen (https, ohne `/` am Ende). |
+| Login: „Für Planning Center sind noch keine Zugangsdaten hinterlegt“ | Gemeinde noch nicht eingerichtet → „Neue Gemeinde einrichten“. Oder über den Login-Link der Gemeinde anmelden statt über die allgemeine Login-Seite. |
+| Login: „redirect_uri mismatch“ / „invalid_client“ | Die Callback-URL in der PCO-/Google-App muss **exakt** der im Tool angezeigten Adresse entsprechen (https, ohne `/` am Ende). Client ID/Secret auf Tippfehler prüfen. |
+| Login: „Dieses Konto gehört zu …, nicht zu …“ | Das PCO-Konto gehört zu einer anderen Organisation. Mit dem richtigen Konto anmelden oder den Login-Link der eigenen Gemeinde verwenden. |
+| „… ist bereits eingerichtet“ beim Einrichten | Die Gemeinde existiert schon. Über ihren Login-Link anmelden; Zugangsdaten ändert ein Admin unter Einstellungen → Planungstool. |
+| Nach Änderung der PCO-Zugangsdaten: „Bitte neu anmelden“ | Erwartet – Tokens gehören zur alten App. Einmal ab- und wieder anmelden. |
 | YouTube muss jede Woche neu verbunden werden | Google-App ist noch im Status „Testing“ → in Produktion stellen (siehe 4). |
 | Podcast bleibt „In Warteschlange“ | Läuft der Worker? `docker compose logs -f` auf der Cloud-Instanz. Stimmen `SERVER_URL` und `WORKER_TOKEN`? |
 | Worker-Fehler „Sign in to confirm you're not a bot“ | YouTube blockiert Downloads von Rechenzentrums-IPs teilweise. Lösung: Mit einem (Zweit-)Google-Konto im Browser bei YouTube anmelden, Cookies mit einer Erweiterung wie „Get cookies.txt LOCALLY“ als `cookies.txt` exportieren und auf der Instanz nach `~/kahal-tools/apps/worker/data/cookies.txt` kopieren (`scp cookies.txt ubuntu@IP:~/kahal-tools/apps/worker/data/`). Der Worker verwendet die Datei automatisch. Cookies laufen nach einiger Zeit ab und müssen dann erneuert werden. |
