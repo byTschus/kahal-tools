@@ -1,4 +1,4 @@
-import { CalendarDays, Unlink } from 'lucide-react';
+import { CalendarDays, Lock, Unlink } from 'lucide-react';
 import { useState } from 'react';
 import { fmtDate } from '../lib/format';
 import type { PlanningEvent } from '../lib/types';
@@ -19,6 +19,7 @@ export function PlanLink({
   value,
   onChange,
   required,
+  locked,
 }: {
   tool: PlanTool;
   ownId?: string | null;
@@ -27,6 +28,8 @@ export function PlanLink({
   value: PlanRef | null;
   onChange: (plan: PlanRef | null) => void;
   required?: boolean;
+  /** Plan ist fix; der Text erklärt warum */
+  locked?: string;
 }) {
   const [picking, setPicking] = useState(false);
   return (
@@ -41,12 +44,20 @@ export function PlanLink({
           <small>Kein Plan verknüpft</small>
         )}
       </div>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
-        <Button size="small" onClick={() => setPicking(true)}>
-          {value ? 'Ändern' : 'Plan wählen'}
-        </Button>
-        {value && !required && <Button size="small" variant="ghost" icon={Unlink} title="Verknüpfung lösen" aria-label="Verknüpfung lösen" onClick={() => onChange(null)} />}
-      </div>
+      {locked ? (
+        <small className="row muted" style={{ gap: 4, flexWrap: 'nowrap', flex: 'none' }} title={locked}>
+          <Lock size={13} /> {locked}
+        </small>
+      ) : (
+        <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <Button size="small" onClick={() => setPicking(true)}>
+            {value ? 'Ändern' : 'Plan wählen'}
+          </Button>
+          {value && !required && (
+            <Button size="small" variant="ghost" icon={Unlink} title="Verknüpfung lösen" aria-label="Verknüpfung lösen" onClick={() => onChange(null)} />
+          )}
+        </div>
+      )}
       {picking && (
         <Modal title="Plan auswählen" wide onClose={() => setPicking(false)}>
           <EventPicker

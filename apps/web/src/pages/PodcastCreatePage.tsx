@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, Mic, Play, SkipForward } from 'lucide-react';
+import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, Lock, Mic, Play, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
@@ -13,7 +13,8 @@ interface Prepared {
   event: { id: string; title: string; startsAt: string | null } | null;
   /** Titel des Podcasts, dem der Plan bereits zugeordnet ist */
   eventLinkedTo: string | null;
-  streamPlanTakenBy: string | null;
+  /** Plan stammt vom Livestream und kann nicht geändert werden */
+  planLocked: boolean;
   video: Broadcast & { durationSec: number | null };
   title: string;
   speaker: string;
@@ -194,21 +195,26 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
                   <small>Noch kein Plan gewählt</small>
                 )}
               </div>
-              <Button size="small" onClick={() => setPickEvent(true)}>
-                {prepared.event ? 'Ändern' : 'Plan wählen'}
-              </Button>
+              {prepared.planLocked ? (
+                <small className="row muted" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                  <Lock size={13} /> vom Livestream
+                </small>
+              ) : (
+                <Button size="small" onClick={() => setPickEvent(true)}>
+                  {prepared.event ? 'Ändern' : 'Plan wählen'}
+                </Button>
+              )}
             </div>
-            {!prepared.event &&
-              (prepared.streamPlanTakenBy ? (
+            {!prepared.event && !prepared.planLocked && <Alert kind="warning">Bitte den Plan wählen, zu dem dieser Podcast gehört.</Alert>}
+            {prepared.eventLinkedTo &&
+              (prepared.planLocked ? (
                 <Alert kind="warning">
-                  Der Plan dieses Livestreams ist bereits dem Podcast „{prepared.streamPlanTakenBy}“ zugeordnet. Bitte einen anderen, noch freien Plan wählen.
+                  Zum Plan dieses Livestreams gibt es bereits den Podcast „{prepared.eventLinkedTo}“. Pro Plan ist nur ein Podcast möglich – bearbeite oder lösche
+                  den bestehenden.
                 </Alert>
               ) : (
-                <Alert kind="warning">Bitte den Plan wählen, zu dem dieser Podcast gehört.</Alert>
+                <Alert kind="warning">Dieser Plan ist bereits dem Podcast „{prepared.eventLinkedTo}“ zugeordnet. Bitte einen anderen Plan wählen.</Alert>
               ))}
-            {prepared.eventLinkedTo && (
-              <Alert kind="warning">Dieser Plan ist bereits dem Podcast „{prepared.eventLinkedTo}“ zugeordnet. Bitte einen anderen Plan wählen.</Alert>
-            )}
             <Field label="Titel">
               <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </Field>

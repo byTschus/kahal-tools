@@ -236,7 +236,7 @@ function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onC
     >
       <Alert>{save.error}</Alert>
       <Field label="Plan">
-        <PlanLink tool="podcast" ownId={podcast.id} value={plan} onChange={setPlan} />
+        <PlanLink tool="podcast" ownId={podcast.id} value={plan} onChange={setPlan} locked={podcast.planLocked ? 'vom Livestream' : undefined} />
       </Field>
       <Field label="Titel">
         <input type="text" value={form.title} onChange={set('title')} />

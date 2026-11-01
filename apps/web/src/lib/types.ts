@@ -45,6 +45,8 @@ export interface Podcast {
   sourceVideoId: string | null;
   planId: string | null;
   planTitle: string | null;
+  /** Plan stammt vom Livestream und ist fix (nur Podcasts) */
+  planLocked?: boolean;
   title: string;
   speaker: string | null;
   scripture: string | null;

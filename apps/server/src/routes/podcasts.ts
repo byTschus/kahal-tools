@@ -27,8 +27,21 @@ podcastsRouter.get('/api/podcasts', requirePerm('podcast', 'view'), async (req, 
     orderBy: [{ publishedAt: { sort: 'desc', nulls: 'first' } }, { createdAt: 'desc' }],
     take: 1000,
   });
-  res.json(podcasts);
+  // Episoden aus einem Livestream mit Plan: der Plan kommt vom Livestream und ist fix
+  const streams = await prisma.livestream.findMany({
+    where: { tenantId: tid(req), planId: { not: null }, externalId: { in: podcasts.flatMap((p) => (p.sourceVideoId ? [p.sourceVideoId] : [])) } },
+    select: { provider: true, externalId: true },
+  });
+  const locked = new Set(streams.map((s) => `${s.provider}:${s.externalId}`));
+  res.json(podcasts.map((p) => ({ ...p, planLocked: locked.has(`${p.sourceProvider}:${p.sourceVideoId}`) })));
 });
+
+/** Plan des Livestreams, aus dem eine Episode geschnitten wird (Livestreams aus kahal.tools haben immer einen) */
+async function streamPlan(tenantId: string, provider: string | null, videoId: string | null) {
+  if (!provider || !videoId) return null;
+  const stream = await prisma.livestream.findFirst({ where: { tenantId, provider, externalId: videoId }, select: { planId: true, planTitle: true } });
+  return stream?.planId ? { planId: stream.planId, planTitle: stream.planTitle } : null;
+}
 
 /** Vergangene Livestreams als Quelle für neue Podcasts */
 podcastsRouter.get('/api/podcasts/sources', requirePerm('podcast', 'create'), async (req, res) => {
@@ -60,9 +73,9 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     getSettings(tenantId, 'podcast'),
   ]);
   if (!broadcast) throw notFound('Video');
-  // Plan des Streams nur vorschlagen, wenn er noch keinem Podcast gehört
-  const streamPlanTaken = !body.eventId && local?.planId ? await prisma.podcast.findFirst({ where: { tenantId, planId: local.planId }, select: { title: true } }) : null;
-  const eventId = body.eventId ?? (streamPlanTaken ? null : (local?.planId ?? null));
+  // Hat der Livestream einen Plan, gilt dieser fest für den Podcast
+  const planLocked = Boolean(local?.planId);
+  const eventId = local?.planId ?? body.eventId ?? null;
   const event = eventId ? await (await planningClientFor(req.user!)).getEvent(eventId) : null;
   const vars = {
     ...(event?.variables ?? { event: { title: broadcast.title, date: broadcast.actualStart ?? broadcast.scheduledStart } }),
@@ -75,8 +88,8 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     eventId,
     event: event ? { id: event.id, title: event.title, startsAt: event.startsAt } : null,
     eventLinkedTo: linked?.title ?? null,
-    /** Der Plan des Streams gehört schon zu diesem Podcast und wurde deshalb nicht übernommen */
-    streamPlanTakenBy: streamPlanTaken?.title ?? null,
+    /** Plan stammt vom Livestream und kann nicht geändert werden */
+    planLocked,
     video: { ...broadcast, durationSec: stats[body.videoId]?.durationSec ?? null },
     title: render(settings.titleTemplate, vars, opts).trim() || broadcast.title,
     speaker: render(settings.speakerTemplate, vars, opts).trim(),
@@ -105,8 +118,14 @@ podcastsRouter.post('/api/podcasts', requirePerm('podcast', 'create'), async (re
   const body = createSchema.parse(req.body);
   const tenantId = tid(req);
   await requirePodcastHost(tenantId);
-  await assertPlanFree('podcast', tenantId, body.eventId);
   const { provider } = await requireStreaming(tenantId);
+  // Der Plan des Livestreams hat Vorrang vor dem mitgeschickten
+  const fixed = await streamPlan(tenantId, provider.key, body.videoId);
+  if (fixed) {
+    body.eventId = fixed.planId;
+    body.eventTitle = fixed.planTitle ?? body.eventTitle;
+  }
+  await assertPlanFree('podcast', tenantId, body.eventId);
   const podcast = await prisma.podcast.create({
     data: {
       tenantId,
@@ -146,6 +165,9 @@ podcastsRouter.patch('/api/podcasts/:id', requirePerm('podcast', 'edit'), async 
   const { eventId, eventTitle, ...body } = updateSchema.parse(req.body);
   const tenantId = tid(req);
   const podcast = await findPodcast(tenantId, String(req.params.id));
+  if (eventId !== undefined && eventId !== podcast.planId && (await streamPlan(tenantId, podcast.sourceProvider, podcast.sourceVideoId))) {
+    throw new HttpError(400, 'Der Plan kommt vom Livestream dieser Episode und kann nicht geändert werden');
+  }
   if (eventId) await assertPlanFree('podcast', tenantId, eventId, podcast.id);
   const updated = await prisma.podcast.update({
     where: { id: podcast.id },
