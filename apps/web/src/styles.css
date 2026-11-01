@@ -214,6 +214,7 @@ tr:last-child td { border-bottom: none; }
 tbody tr { transition: background 0.1s; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cell-title { font-weight: 600; color: var(--text); }
+a.title-link:hover { color: var(--accent-text); }
 .cell-sub { font-size: 0.82rem; color: var(--muted); margin-top: 1px; }
 .actions { display: flex; gap: 6px; justify-content: flex-end; }
 .meta { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 0.84rem; font-variant-numeric: tabular-nums; }

@@ -30,6 +30,8 @@ export interface Broadcast {
   privacy: Privacy;
   thumbnailUrl?: string;
   url: string;
+  /** Bearbeiten direkt auf der Plattform (z.B. YouTube Studio) */
+  editUrl?: string;
 }
 
 export interface BroadcastInput {

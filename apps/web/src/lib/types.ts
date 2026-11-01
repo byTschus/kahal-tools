@@ -32,6 +32,7 @@ export interface Broadcast {
   privacy: 'public' | 'unlisted' | 'private';
   thumbnailUrl?: string;
   url: string;
+  editUrl?: string;
   planId?: string | null;
   planTitle?: string | null;
   peakConcurrent?: number | null;

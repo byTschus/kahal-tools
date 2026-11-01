@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, ExternalLink, Eye, Pencil, Plus, Radio, RefreshCw, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Eye, Pencil, Plus, Radio, RefreshCw, SlidersHorizontal, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
@@ -83,7 +83,9 @@ export function LivestreamPage() {
                   <tr key={b.id}>
                     <td style={{ width: 110 }}>{b.thumbnailUrl && <img className="thumb" src={b.thumbnailUrl} alt="" />}</td>
                     <td>
-                      <div className="cell-title">{b.title}</div>
+                      <a className="cell-title title-link" href={b.url} target="_blank" rel="noreferrer" title="Video auf YouTube ansehen">
+                        {b.title}
+                      </a>
                       <div className="cell-sub">
                         {PRIVACY[b.privacy]}
                         {b.planTitle ? ` · ${b.planTitle}` : ''}
@@ -107,14 +109,16 @@ export function LivestreamPage() {
                     </td>
                     <td>
                       <div className="actions">
-                        <a className="btn small icon-only" href={b.url} target="_blank" rel="noreferrer" title="Auf YouTube öffnen" aria-label="Auf YouTube öffnen">
-                          <ExternalLink size={15} />
-                        </a>
+                        {b.editUrl && (
+                          <a className="btn small icon-only" href={b.editUrl} target="_blank" rel="noreferrer" title="In YouTube Studio bearbeiten" aria-label="In YouTube Studio bearbeiten">
+                            <Pencil size={15} />
+                          </a>
+                        )}
                         {can('livestream', 'edit') && (
                           <Button size="small" icon={CalendarDays} title="Plan verknüpfen" aria-label="Plan verknüpfen" onClick={() => setLinking(b)} />
                         )}
                         {can('livestream', 'edit') && b.status !== 'completed' && (
-                          <Button size="small" icon={Pencil} onClick={() => setEditing(b)}>
+                          <Button size="small" icon={SlidersHorizontal} onClick={() => setEditing(b)} title="Titel, Beschreibung, Start, Playlist und Thumbnail in kahal.tools ändern">
                             Bearbeiten
                           </Button>
                         )}

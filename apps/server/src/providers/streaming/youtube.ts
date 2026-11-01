@@ -75,6 +75,7 @@ function mapBroadcast(b: any): Broadcast {
     privacy: b.status?.privacyStatus ?? 'public',
     thumbnailUrl: (thumbs.medium ?? thumbs.high ?? thumbs.default)?.url,
     url: `https://www.youtube.com/watch?v=${b.id}`,
+    editUrl: `https://studio.youtube.com/video/${b.id}/edit`,
   };
 }
 
