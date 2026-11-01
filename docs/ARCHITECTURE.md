@@ -37,6 +37,7 @@ Die PCO-Tokens jedes Benutzers werden gespeichert und automatisch erneuert. Abfr
 * Der Worker meldet Fortschritt (zugleich Lebenszeichen). Antwortet ein Worker 10 Minuten nicht, wird der Auftrag wieder freigegeben (max. 3 Versuche, mit Wartezeit).
 * Die Zugangsdaten für das Hosting erhält der Worker erst beim Abholen – in der Warteschlange liegen keine Geheimnisse.
 * Mehr Last → `WORKER_CONCURRENCY` erhöhen oder weitere Worker-Server mit derselben `.env` starten. Keine eingehenden Ports am Worker nötig.
+* Optional startet der Server die Worker-Instanz per OpenStack-API (Application Credential, pro Gemeinde) nur bei Bedarf und fährt sie nach einer Leerlaufzeit wieder herunter (`services/workerServer.ts`, Scheduler + direkt beim Einreihen eines Auftrags).
 
 Ressourcen sparen: Der Worker lädt **nur die Audiospur** und **nur den gewählten Ausschnitt** (`yt-dlp --download-sections`), kodiert einmal direkt nach MP3 (Standard 96 kbit/s mono) und löscht alle temporären Dateien sofort.
 

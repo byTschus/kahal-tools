@@ -264,6 +264,44 @@ Der Container startet nach einem Neustart der Instanz automatisch wieder und akt
 
 **Skalieren:** Bei viel Last `WORKER_CONCURRENCY=2` setzen (dann braucht es eher 2 vCPU) oder eine zweite Instanz mit derselben `.env` starten.
 
+### 6.3 YouTube über IPv6
+
+YouTube blockiert Downloads von IPv4-Adressen aus Rechenzentren oft mit „Sign in to confirm you're not a bot“. Über IPv6 klappt es in der Regel ohne Cookies. Der Worker läuft deshalb im Host-Netzwerk (`network_mode: host` in `docker-compose.yml`) und lädt mit `YTDLP_IP_VERSION=6` über IPv6.
+
+Prüfen, ob die Instanz IPv6 hat (`HTTP/2 200` = ja):
+
+```bash
+curl -6 -sI https://www.youtube.com | head -1
+```
+
+Bestehende Installationen: in `apps/worker/.env` die Zeile `YTDLP_IP_VERSION=6` ergänzen, dann `docker compose up -d --build`. Ohne IPv6 die Zeile leer lassen.
+
+### 6.4 Server nur bei Bedarf laufen lassen (optional, spart Kosten)
+
+kahal.tools kann die Instanz automatisch starten, sobald ein Podcast in der Warteschlange ist, und sie nach einer einstellbaren Leerlaufzeit wieder herunterfahren. Gestoppte Instanzen werden bei Infomaniak nicht mehr verrechnet – nur der Speicher (Volume) und die öffentliche IPv4-Adresse kosten weiter.
+
+**1. Application Credential erstellen** (ein Zugang nur für dieses Projekt, ohne dein Passwort):
+
+1. Im Horizon-Dashboard oben links das richtige Projekt wählen.
+2. **Identity → Application Credentials → Create Application Credential**
+   * **Name:** `kahal-tools`
+   * **Secret:** leer lassen (wird erzeugt)
+   * **Expiration:** leer lassen (läuft nicht ab)
+   * **Roles:** leer lassen (übernimmt deine Rolle im Projekt)
+   * „Unrestricted“ **nicht** anhaken
+3. **Create** → **ID** und **Secret** kopieren. Das Secret wird nur dieses eine Mal angezeigt.
+4. Auth-URL nachschauen: **Project → API Access → Identity**, z.B. `https://api.pub1.infomaniak.cloud/identity/v3` (bei neueren Projekten `pub2`).
+
+**2. In kahal.tools eintragen:** Einstellungen → Podcast → **Worker-Server**
+
+1. Auth-URL, Application Credential ID und Secret eintragen (Region leer lassen).
+2. **Server laden** → die Worker-Instanz auswählen.
+3. „Automatisch starten“ und „Automatisch herunterfahren“ anhaken, Leerlaufzeit z.B. 15 Minuten → **Speichern**.
+
+Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker startet den Worker automatisch → Auftrag wird verarbeitet → nach der Leerlaufzeit fährt die Instanz wieder herunter. Mit **Starten** / **Stoppen** lässt sie sich auch von Hand steuern; nach einem manuellen Start bleibt sie mindestens die Leerlaufzeit lang an.
+
+> Wichtig: Den Worker auf der Instanz nicht mit `docker compose stop` anhalten – sonst startet er nach dem Hochfahren nicht automatisch. Zum Aktualisieren `docker compose up -d --build` verwenden.
+
 ---
 
 ## 7. Erste Schritte im Tool
@@ -325,7 +363,7 @@ cd apps/worker && docker compose up -d --build
 | Nach Änderung der PCO-Zugangsdaten: „Bitte neu anmelden“ | Erwartet – Tokens gehören zur alten App. Einmal ab- und wieder anmelden. |
 | YouTube muss jede Woche neu verbunden werden | Google-App ist noch im Status „Testing“ → in Produktion stellen (siehe 4). |
 | Podcast bleibt „In Warteschlange“ | Läuft der Worker? `docker compose logs -f` auf der Cloud-Instanz. Stimmen `SERVER_URL` und `WORKER_TOKEN`? |
-| Worker-Fehler „Sign in to confirm you're not a bot“ | YouTube blockiert Downloads von Rechenzentrums-IPs teilweise. Lösung: Mit einem (Zweit-)Google-Konto im Browser bei YouTube anmelden, Cookies mit einer Erweiterung wie „Get cookies.txt LOCALLY“ als `cookies.txt` exportieren und auf der Instanz nach `~/kahal-tools/apps/worker/data/cookies.txt` kopieren (`scp cookies.txt ubuntu@IP:~/kahal-tools/apps/worker/data/`). Der Worker verwendet die Datei automatisch. Cookies laufen nach einiger Zeit ab und müssen dann erneuert werden. |
+| Worker-Fehler „Sign in to confirm you're not a bot“ | YouTube blockiert Downloads von Rechenzentrums-IPs teilweise. Zuerst IPv6 einrichten (Abschnitt 6.3). Falls das nicht reicht: Mit einem (Zweit-)Google-Konto im Browser bei YouTube anmelden, Cookies mit einer Erweiterung wie „Get cookies.txt LOCALLY“ als `cookies.txt` exportieren und auf der Instanz nach `~/kahal-tools/apps/worker/data/cookies.txt` kopieren (`scp cookies.txt ubuntu@IP:~/kahal-tools/apps/worker/data/`). Der Worker verwendet die Datei automatisch. Cookies laufen nach einiger Zeit ab und müssen dann erneuert werden. |
 | Worker-Fehler bei YouTube nach längerer Zeit | `yt-dlp` ist veraltet → Worker neu starten (aktualisiert sich beim Start) oder `docker compose build --no-cache && docker compose up -d`. |
 | „Datei konnte auf dem Server nicht gelöscht werden“ | FTP-Benutzer braucht Löschrechte im Podcast-Verzeichnis. |
 | Gleichzeitige Zuschauer fehlen | Nur für Streams verfügbar, die über kahal.tools erstellt wurden, und nur, wenn der Server während des Streams lief. Alternativ in den Einstellungen auf „Aufrufe“ umstellen. |

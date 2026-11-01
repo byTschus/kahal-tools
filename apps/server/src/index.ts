@@ -19,6 +19,7 @@ import { settingsRouter } from './routes/settings.js';
 import { usersRouter } from './routes/users.js';
 import { visitorsRouter } from './routes/visitors.js';
 import { workerRouter } from './routes/worker.js';
+import { workerServerRouter } from './routes/workerServer.js';
 import { startScheduler } from './services/scheduler.js';
 import './services/podcasts.js';
 
@@ -73,6 +74,7 @@ app.use(integrationsRouter);
 app.use(livestreamsRouter);
 app.use(podcastsRouter);
 app.use(visitorsRouter);
+app.use(workerServerRouter);
 
 app.use('/api', (_req, _res, next) => next(new HttpError(404, 'API-Endpunkt nicht gefunden')));
 

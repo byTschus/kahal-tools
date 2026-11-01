@@ -1,10 +1,12 @@
 import { prisma } from '../db.js';
 import { streamingFor } from './integrations.js';
 import { recoverStaleJobs } from './jobs.js';
+import { manageWorkerServers } from './workerServer.js';
 
 /**
  * Hintergrundaufgaben im Server-Prozess:
  * - Hängende Worker-Aufträge wieder freigeben
+ * - Worker-Server in der Cloud nach Bedarf starten und stoppen
  * - Während laufender Livestreams die Zuschauerzahlen abfragen (Spitzenwert der gleichzeitigen Zuschauer
  *   ist bei YouTube nur während des Streams abrufbar und wird deshalb hier mitgeschrieben)
  */
@@ -19,7 +21,7 @@ export function startScheduler() {
     }
   };
   const tick = () => {
-    void run('jobs', recoverStaleJobs);
+    void run('jobs', recoverStaleJobs).then(() => run('worker-server', manageWorkerServers));
     void run('livestreams', pollLivestreams);
   };
   setTimeout(tick, 10_000);

@@ -4,6 +4,7 @@ import { Alert, Button, Card, Checkbox, ConfirmButton, Field, Spinner , Saved } 
 import { api, useAction, useApi } from '../../lib/api';
 import type { HostField, Integrations } from '../../lib/types';
 import { useSettings } from './useSettings';
+import { WorkerServerCard } from './WorkerServerCard';
 
 interface PodcastSettingsData {
   titleTemplate: string;
@@ -36,6 +37,7 @@ export function PodcastSettings() {
   return (
     <>
       <HostCard />
+      <WorkerServerCard />
       {!s.form ? (
         <Spinner />
       ) : (

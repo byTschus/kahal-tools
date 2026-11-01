@@ -8,6 +8,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    # Host-Netzwerk, damit der Container die IPv6-Adresse des Servers nutzen kann (siehe YTDLP_IP_VERSION)
+    network_mode: host
     volumes:
       # optional: cookies.txt für YouTube (siehe docs/SETUP.md, Abschnitt "YouTube blockiert den Download")
       - ./data:/data

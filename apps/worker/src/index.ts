@@ -21,6 +21,8 @@ const TMP_DIR = process.env.TMP_DIR ?? tmpdir();
 const YTDLP = process.env.YTDLP_BIN ?? 'yt-dlp';
 const YTDLP_COOKIES = process.env.YTDLP_COOKIES ?? '/data/cookies.txt';
 const YTDLP_JS_RUNTIME = process.env.YTDLP_JS_RUNTIME ?? 'node';
+// 6 = YouTube über IPv6 laden (Rechenzentrums-IPv4-Adressen werden oft als Bot blockiert), 4 = nur IPv4, leer = automatisch
+const YTDLP_IP_VERSION = process.env.YTDLP_IP_VERSION ?? '';
 const YTDLP_EXTRA_ARGS = (process.env.YTDLP_EXTRA_ARGS ?? '').split(' ').filter(Boolean);
 const AUTO_UPDATE = process.env.YTDLP_AUTO_UPDATE !== 'false';
 
@@ -104,6 +106,7 @@ async function processPodcast(job: PodcastJob) {
     ];
     if (YTDLP_JS_RUNTIME) args.push('--js-runtimes', YTDLP_JS_RUNTIME);
     if (existsSync(YTDLP_COOKIES)) args.push('--cookies', YTDLP_COOKIES);
+    if (YTDLP_IP_VERSION === '6' || YTDLP_IP_VERSION === '4') args.push(`-${YTDLP_IP_VERSION}`);
     args.push(...YTDLP_EXTRA_ARGS, p.videoUrl);
     const totalSec = p.endSec - p.startSec;
     await run(YTDLP, args, (line) => {
