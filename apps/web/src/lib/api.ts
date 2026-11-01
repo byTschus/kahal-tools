@@ -21,7 +21,7 @@ async function request<T>(method: string, path: string, body?: unknown, file?: {
   const data = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
     let message = data?.error ?? res.statusText;
-    if (data?.details?.length) message += ': ' + data.details.map((d: any) => d.message).join(', ');
+    if (data?.details?.length) message += ': ' + data.details.map((d: any) => (d.path?.length ? `${d.path.join('.')}: ${d.message}` : d.message)).join(', ');
     throw new ApiError(res.status, message, data?.code);
   }
   return data as T;

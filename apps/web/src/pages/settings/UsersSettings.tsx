@@ -281,7 +281,16 @@ function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClo
 
   const submit = async () => {
     if (!person) return;
-    const ok = await save.run(() => api.post('/api/users/invite', { ...person, groupIds, permissions: perms }));
+    const ok = await save.run(() =>
+      api.post('/api/users/invite', {
+        externalPersonId: person.externalId,
+        name: person.name,
+        email: person.email ?? null,
+        avatarUrl: person.avatarUrl ?? null,
+        groupIds,
+        permissions: perms,
+      }),
+    );
     if (ok) onInvited(person.name);
   };
 
