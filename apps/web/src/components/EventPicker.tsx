@@ -1,3 +1,4 @@
+import { Check, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useApi } from '../lib/api';
 import { fmtDate } from '../lib/format';
@@ -30,7 +31,10 @@ export function EventPicker({
           value={range}
           onChange={setRange}
         />
-        <input type="search" placeholder="Suchen …" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ maxWidth: 220 }} />
+        <div className="search" style={{ maxWidth: 240, flex: 1 }}>
+          <Search size={15} />
+          <input type="search" placeholder="Suchen" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        </div>
       </div>
       {error && <Alert>{error.message}</Alert>}
       {loading ? (
@@ -41,12 +45,12 @@ export function EventPicker({
           {list.map((e) => (
             <button key={e.id} type="button" className={`list-item ${value === e.id ? 'selected' : ''}`} onClick={() => onChange(e)}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{e.title}</div>
-                <small>
+                <div className="cell-title">{e.title}</div>
+                <div className="cell-sub">
                   {fmtDate(e.startsAt)} {e.sourceName ? `· ${e.sourceName}` : ''}
-                </small>
+                </div>
               </div>
-              {value === e.id && <span>✓</span>}
+              {value === e.id && <Check className="check" size={18} />}
             </button>
           ))}
         </div>

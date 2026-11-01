@@ -1,3 +1,4 @@
+import { ArrowLeft, Check, Search, ShieldCheck, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmButton, Field, Modal, Spinner } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
@@ -71,7 +72,7 @@ export function UsersSettings() {
                 </div>
               </div>
               <div className="row">
-                <Button variant="primary" size="small" onClick={() => approve(u)}>
+                <Button variant="primary" size="small" icon={Check} onClick={() => approve(u)}>
                   Freischalten
                 </Button>
                 <ConfirmButton question={`Anfrage von ${u.name} ablehnen?`} onConfirm={async () => { await api.del(`/api/users/${u.id}`); void reload(); }}>
@@ -85,8 +86,8 @@ export function UsersSettings() {
       <Card
         title="Benutzer"
         actions={
-          <Button variant="primary" onClick={() => setInviting(true)}>
-            ＋ Person einladen
+          <Button variant="primary" icon={UserPlus} onClick={() => setInviting(true)}>
+            Person einladen
           </Button>
         }
       >
@@ -116,10 +117,15 @@ export function UsersSettings() {
                       <div className="row" style={{ flexWrap: 'nowrap' }}>
                         <Avatar name={u.name} url={u.avatarUrl} />
                         <div>
-                          <b>{u.name}</b> {u.isAdmin && <Badge color="blue">Admin</Badge>}
-                          <div>
-                            <small>{u.email}</small>
+                          <div className="row" style={{ gap: 8 }}>
+                            <span className="cell-title">{u.name}</span>
+                            {u.isAdmin && (
+                              <Badge plain color="green">
+                                Admin
+                              </Badge>
+                            )}
                           </div>
+                          <div className="cell-sub">{u.email}</div>
                         </div>
                       </div>
                     </td>
@@ -134,7 +140,7 @@ export function UsersSettings() {
                     </td>
                     <td>
                       <div className="actions">
-                        <Button size="small" onClick={() => setEditing(u)}>
+                        <Button size="small" icon={ShieldCheck} onClick={() => setEditing(u)}>
                           Rechte
                         </Button>
                         {u.id !== me.user.id && (
@@ -287,7 +293,9 @@ function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClo
       footer={
         person ? (
           <>
-            <Button onClick={() => setPerson(null)}>← Andere Person</Button>
+            <Button variant="ghost" icon={ArrowLeft} onClick={() => setPerson(null)}>
+              Andere Person
+            </Button>
             <Button variant="primary" busy={save.busy} onClick={submit}>
               Einladen
             </Button>
@@ -298,7 +306,10 @@ function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClo
       <Alert>{save.error ?? error?.message}</Alert>
       {!person ? (
         <>
-          <input type="search" autoFocus placeholder="Name oder E-Mail suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="search">
+            <Search size={15} />
+            <input type="search" autoFocus placeholder="Name oder E-Mail suchen" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
           {loading && <Spinner />}
           <div className="scroll-list">
             {people?.map((p) => (

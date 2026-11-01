@@ -1,3 +1,4 @@
+import { ArrowLeft, ExternalLink, Eye, Pencil, Plus, Radio, RefreshCw, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
@@ -11,7 +12,7 @@ type Status = 'upcoming' | 'active' | 'completed';
 
 const STATUS_BADGE: Record<Broadcast['status'], ReactNode> = {
   upcoming: <Badge color="blue">Geplant</Badge>,
-  live: <Badge color="red">● Live</Badge>,
+  live: <Badge color="live">Live</Badge>,
   completed: <Badge>Beendet</Badge>,
 };
 
@@ -32,10 +33,10 @@ export function LivestreamPage() {
 
   return (
     <>
-      <PageHeader title="📡 Livestream">
+      <PageHeader title="Livestream" description="Streams für die kommenden Gottesdienste planen und verwalten.">
         {can('livestream', 'create') && (
-          <Button variant="primary" onClick={() => setEditing('new')}>
-            ＋ Neuer Livestream
+          <Button variant="primary" icon={Plus} onClick={() => setEditing('new')}>
+            Neuer Livestream
           </Button>
         )}
       </PageHeader>
@@ -51,15 +52,15 @@ export function LivestreamPage() {
           onChange={setStatus}
         />
         {error?.code === 'no-streaming' ? (
-          <Empty>
-            Noch keine Streaming-Plattform verbunden. <Link to="/settings/livestream">Jetzt in den Einstellungen verbinden →</Link>
+          <Empty icon={Radio} title="Noch kein YouTube-Kanal verbunden">
+            <Link to="/settings/livestream">In den Einstellungen verbinden</Link>
           </Empty>
         ) : error ? (
           <Alert>{error.message}</Alert>
         ) : loading ? (
           <Spinner />
         ) : !data?.items.length ? (
-          <Empty>Keine Livestreams vorhanden.</Empty>
+          <Empty icon={Radio} title="Keine Livestreams">In dieser Ansicht gibt es noch keine Streams.</Empty>
         ) : (
           <div className="table-wrap">
             <table>
@@ -78,30 +79,42 @@ export function LivestreamPage() {
                   <tr key={b.id}>
                     <td style={{ width: 110 }}>{b.thumbnailUrl && <img className="thumb" src={b.thumbnailUrl} alt="" />}</td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{b.title}</div>
-                      <small>
+                      <div className="cell-title">{b.title}</div>
+                      <div className="cell-sub">
                         {PRIVACY[b.privacy]}
-                        {b.planTitle ? ` · Plan: ${b.planTitle}` : ''}
-                      </small>
+                        {b.planTitle ? ` · ${b.planTitle}` : ''}
+                      </div>
                     </td>
                     <td>{fmtDate(b.actualStart ?? b.scheduledStart)}</td>
                     <td>{STATUS_BADGE[b.status]}</td>
                     <td className="num">
-                      {b.peakConcurrent != null && <div title="Max. gleichzeitige Zuschauer">👥 {fmtNumber(b.peakConcurrent)}</div>}
-                      {b.viewCount != null && <small title="Aufrufe">▶ {fmtNumber(b.viewCount)}</small>}
+                      <div className="stack" style={{ gap: 2, alignItems: 'flex-end' }}>
+                        {b.peakConcurrent != null && (
+                          <span className="meta" title="Max. gleichzeitige Zuschauer">
+                            <Users size={14} /> {fmtNumber(b.peakConcurrent)}
+                          </span>
+                        )}
+                        {b.viewCount != null && (
+                          <span className="meta" title="Aufrufe">
+                            <Eye size={14} /> {fmtNumber(b.viewCount)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <div className="actions">
-                        <a className="btn small" href={b.url} target="_blank" rel="noreferrer">
-                          YouTube ↗
+                        <a className="btn small icon-only" href={b.url} target="_blank" rel="noreferrer" title="Auf YouTube öffnen" aria-label="Auf YouTube öffnen">
+                          <ExternalLink size={15} />
                         </a>
                         {can('livestream', 'edit') && b.status !== 'completed' && (
-                          <Button size="small" onClick={() => setEditing(b)}>
+                          <Button size="small" icon={Pencil} onClick={() => setEditing(b)}>
                             Bearbeiten
                           </Button>
                         )}
                         {can('livestream', 'delete') && (
-                          <ConfirmButton question={`Livestream „${b.title}“ auf YouTube löschen?`} onConfirm={() => remove(b)} />
+                          <ConfirmButton icon={Trash2} title="Löschen" aria-label="Löschen" question={`Livestream „${b.title}“ auf YouTube löschen?`} onConfirm={() => remove(b)}>
+                            {null}
+                          </ConfirmButton>
                         )}
                       </div>
                     </td>
@@ -180,9 +193,13 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
       footer={
         step === 'form' ? (
           <>
-            {!broadcast && <Button onClick={() => setStep('event')}>← Anderer Plan</Button>}
+            {!broadcast && (
+              <Button variant="ghost" icon={ArrowLeft} onClick={() => setStep('event')}>
+                Anderer Plan
+              </Button>
+            )}
             {broadcast && (
-              <Button onClick={() => setStep('event')} title="Titel und Beschreibung aus einem Plan neu generieren">
+              <Button icon={RefreshCw} onClick={() => setStep('event')} title="Titel und Beschreibung aus einem Plan neu generieren">
                 Aus Plan neu generieren
               </Button>
             )}

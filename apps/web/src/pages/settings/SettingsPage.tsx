@@ -31,8 +31,8 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="⚙️ Einstellungen" />
-      <Tabs tabs={visible} value={current} onChange={(k) => navigate(`/settings/${k}`)} />
+      <PageHeader title="Einstellungen" description="Benutzer, Rechte und die Einstellungen der einzelnen Tools." />
+      <Tabs variant="underline" tabs={visible} value={current} onChange={(k) => navigate(`/settings/${k}`)} />
       {current === 'users' && <UsersSettings />}
       {current === 'groups' && <GroupsSettings />}
       {current === 'planning' && <PlanningSettings />}

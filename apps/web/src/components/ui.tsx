@@ -1,16 +1,18 @@
+import { AlertCircle, CheckCircle2, Info, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
-export function Button({
-  variant,
-  size,
-  busy,
-  children,
-  className = '',
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'danger' | 'ghost'; size?: 'small' | 'large'; busy?: boolean }) {
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'danger' | 'ghost';
+  size?: 'small' | 'large';
+  busy?: boolean;
+  icon?: LucideIcon;
+};
+
+export function Button({ variant, size, busy, icon: Icon, children, className = '', ...props }: ButtonProps) {
+  const iconSize = size === 'small' ? 15 : 16;
   return (
-    <button className={`btn ${variant ?? ''} ${size ?? ''} ${className}`} disabled={busy || props.disabled} {...props}>
-      {busy && <span className="spinner" style={{ width: 14, height: 14 }} />}
+    <button className={`btn ${variant ?? ''} ${size ?? ''} ${!children ? 'icon-only' : ''} ${className}`} disabled={busy || props.disabled} {...props}>
+      {busy ? <span className="spinner" style={{ width: 14, height: 14 }} /> : Icon && <Icon size={iconSize} strokeWidth={1.9} />}
       {children}
     </button>
   );
@@ -24,13 +26,21 @@ export function Spinner({ label = 'Wird geladen …' }: { label?: string }) {
   );
 }
 
+const ALERT_ICON = { error: AlertCircle, success: CheckCircle2, info: Info, warning: TriangleAlert };
+
 export function Alert({ kind = 'error', children }: { kind?: 'error' | 'success' | 'info' | 'warning'; children: ReactNode }) {
   if (!children) return null;
-  return <div className={`alert ${kind}`}>{children}</div>;
+  const Icon = ALERT_ICON[kind];
+  return (
+    <div className={`alert ${kind}`} role={kind === 'error' ? 'alert' : undefined}>
+      <Icon size={16} strokeWidth={2} />
+      <div>{children}</div>
+    </div>
+  );
 }
 
-export function Badge({ color, children }: { color?: 'green' | 'red' | 'blue' | 'yellow'; children: ReactNode }) {
-  return <span className={`badge ${color ?? ''}`}>{children}</span>;
+export function Badge({ color, plain, children }: { color?: 'green' | 'red' | 'blue' | 'yellow' | 'live'; plain?: boolean; children: ReactNode }) {
+  return <span className={`badge ${color ?? ''} ${plain ? 'plain' : ''}`}>{children}</span>;
 }
 
 export function Card({ title, actions, children, className = '' }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {
@@ -89,9 +99,7 @@ export function Modal({
       <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true">
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="btn ghost small" onClick={onClose} aria-label="Schliessen">
-            ✕
-          </button>
+          <Button variant="ghost" size="small" icon={X} onClick={onClose} aria-label="Schliessen" />
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}
@@ -105,14 +113,16 @@ export function ConfirmButton({
   onConfirm,
   question = 'Wirklich löschen?',
   children = 'Löschen',
+  icon,
   ...props
-}: { onConfirm: () => void | Promise<void>; question?: string; children?: ReactNode } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'>) {
+}: { onConfirm: () => void | Promise<void>; question?: string; children?: ReactNode; icon?: LucideIcon } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'>) {
   const [busy, setBusy] = useState(false);
   return (
     <Button
       variant="danger"
       size="small"
       busy={busy}
+      icon={icon}
       {...props}
       onClick={async () => {
         if (!window.confirm(question)) return;
@@ -129,11 +139,21 @@ export function ConfirmButton({
   );
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { key: T; label: ReactNode }[]; value: T; onChange: (key: T) => void }) {
+export function Tabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  variant = 'pill',
+}: {
+  tabs: { key: T; label: ReactNode }[];
+  value: T;
+  onChange: (key: T) => void;
+  variant?: 'pill' | 'underline';
+}) {
   return (
-    <div className="tabs" role="tablist">
+    <div className={`tabs ${variant === 'underline' ? 'underline' : ''}`} role="tablist">
       {tabs.map((t) => (
-        <button key={t.key} role="tab" className={`tab ${value === t.key ? 'active' : ''}`} onClick={() => onChange(t.key)}>
+        <button key={t.key} role="tab" aria-selected={value === t.key} className={`tab ${value === t.key ? 'active' : ''}`} onClick={() => onChange(t.key)}>
           {t.label}
         </button>
       ))}
@@ -141,19 +161,34 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { key:
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className="empty">{children}</div>;
+export function Empty({ icon: Icon, title, children }: { icon?: LucideIcon; title?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="empty">
+      {Icon && (
+        <span className="icon-tile">
+          <Icon size={20} strokeWidth={1.75} />
+        </span>
+      )}
+      {title && <div className="title">{title}</div>}
+      {children && <div>{children}</div>}
+    </div>
+  );
 }
 
-export function Avatar({ name, url }: { name: string; url?: string | null }) {
-  if (url) return <img className="avatar" src={url} alt="" />;
+export function Avatar({ name, url, size = 30 }: { name: string; url?: string | null; size?: number }) {
+  const style = { width: size, height: size };
+  if (url) return <img className="avatar" src={url} alt="" style={style} />;
   const initials = name
     .split(/\s+/)
     .map((p) => p[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  return <span className="avatar">{initials}</span>;
+  return (
+    <span className="avatar" style={style}>
+      {initials}
+    </span>
+  );
 }
 
 export function Progress({ value }: { value: number }) {
@@ -164,11 +199,24 @@ export function Progress({ value }: { value: number }) {
   );
 }
 
-export function PageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
+export function PageHeader({ title, description, children }: { title: ReactNode; description?: ReactNode; children?: ReactNode }) {
   return (
     <div className="page-header">
-      <h1>{title}</h1>
+      <div>
+        <h1>{title}</h1>
+        {description && <p>{description}</p>}
+      </div>
       {children && <div className="row">{children}</div>}
     </div>
+  );
+}
+
+/** Kurzer Bestätigungstext nach dem Speichern */
+export function Saved({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="meta" style={{ color: 'var(--success)' }}>
+      <CheckCircle2 size={15} /> Gespeichert
+    </span>
   );
 }

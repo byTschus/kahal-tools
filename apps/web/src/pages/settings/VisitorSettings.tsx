@@ -1,5 +1,6 @@
+import { ArrowDown, ArrowUp, MapPin, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Spinner } from '../../components/ui';
+import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Spinner , Saved } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
 import type { Integrations, VisitorLocation } from '../../lib/types';
 import { useSettings } from './useSettings';
@@ -39,7 +40,7 @@ export function VisitorSettings() {
         {loading && !locations ? (
           <Spinner />
         ) : !locations?.length ? (
-          <Empty>Noch keine Orte.</Empty>
+          <Empty icon={MapPin} title="Noch keine Orte" />
         ) : (
           <table>
             <tbody>
@@ -50,12 +51,8 @@ export function VisitorSettings() {
                   </td>
                   <td>
                     <div className="actions">
-                      <Button size="small" variant="ghost" disabled={i === 0} onClick={() => move(l, -1)} title="Nach oben">
-                        ↑
-                      </Button>
-                      <Button size="small" variant="ghost" disabled={i === locations.length - 1} onClick={() => move(l, 1)} title="Nach unten">
-                        ↓
-                      </Button>
+                      <Button size="small" variant="ghost" icon={ArrowUp} disabled={i === 0} onClick={() => move(l, -1)} title="Nach oben" aria-label="Nach oben" />
+                      <Button size="small" variant="ghost" icon={ArrowDown} disabled={i === locations.length - 1} onClick={() => move(l, 1)} title="Nach unten" aria-label="Nach unten" />
                       {l.active ? (
                         <ConfirmButton
                           question={`Ort „${l.name}“ entfernen? Bereits erfasste Zahlen bleiben in der Statistik erhalten.`}
@@ -86,7 +83,7 @@ export function VisitorSettings() {
         )}
         <div className="row" style={{ marginTop: 12, flexWrap: 'nowrap' }}>
           <input type="text" placeholder="Neuer Ort, z.B. Saal EG" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && addLocation()} />
-          <Button variant="primary" busy={add.busy} disabled={!name.trim()} onClick={addLocation}>
+          <Button variant="primary" icon={Plus} busy={add.busy} disabled={!name.trim()} onClick={addLocation}>
             Hinzufügen
           </Button>
         </div>
@@ -111,7 +108,7 @@ export function VisitorSettings() {
               <Button variant="primary" busy={s.busy} onClick={s.save}>
                 Speichern
               </Button>
-              {s.saved && <span className="muted">✓ Gespeichert</span>}
+              <Saved show={s.saved} />
             </div>
           </div>
         )}

@@ -1,3 +1,4 @@
+import { Pencil, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, Spinner } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
@@ -22,8 +23,8 @@ export function GroupsSettings() {
     <Card
       title="Gruppen"
       actions={
-        <Button variant="primary" onClick={() => setEditing('new')}>
-          ＋ Neue Gruppe
+        <Button variant="primary" icon={Plus} onClick={() => setEditing('new')}>
+          Neue Gruppe
         </Button>
       }
     >
@@ -31,7 +32,7 @@ export function GroupsSettings() {
       {loading && !groups ? (
         <Spinner />
       ) : !groups?.length ? (
-        <Empty>Noch keine Gruppen.</Empty>
+        <Empty icon={UsersRound} title="Noch keine Gruppen" />
       ) : (
         <table>
           <thead>
@@ -52,20 +53,27 @@ export function GroupsSettings() {
                   <small>{summary(g.permissions)}</small>
                 </td>
                 <td>
-                  <Badge>{g.memberIds.length}</Badge>
+                  <span className="meta">
+                    <UsersRound size={14} /> {g.memberIds.length}
+                  </span>
                 </td>
                 <td>
                   <div className="actions">
-                    <Button size="small" onClick={() => setEditing(g)}>
+                    <Button size="small" icon={Pencil} onClick={() => setEditing(g)}>
                       Bearbeiten
                     </Button>
                     <ConfirmButton
+                      icon={Trash2}
+                      title="Löschen"
+                      aria-label="Löschen"
                       question={`Gruppe „${g.name}“ löschen?`}
                       onConfirm={async () => {
                         await api.del(`/api/groups/${g.id}`);
                         void reload();
                       }}
-                    />
+                    >
+                      {null}
+                    </ConfirmButton>
                   </div>
                 </td>
               </tr>

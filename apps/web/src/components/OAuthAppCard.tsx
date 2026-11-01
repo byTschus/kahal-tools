@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, useAction } from '../lib/api';
 import { CopyField } from './CopyField';
-import { Alert, Badge, Button, Card, ConfirmButton, Field } from './ui';
+import { Alert, Badge, Button, Card, ConfirmButton, Field, Saved } from './ui';
 
 export interface OAuthAppStatus {
   clientId: string;
@@ -47,7 +47,7 @@ export function OAuthAppCard({
     >
       <div className="stack">
         <details open={!status.source}>
-          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Anleitung</summary>
+          <summary>Anleitung</summary>
           <div style={{ marginTop: 8 }}>{instructions}</div>
         </details>
         <Field label="Redirect-/Callback-URL (in der App beim Anbieter eintragen)">
@@ -96,7 +96,7 @@ export function OAuthAppCard({
               Entfernen
             </ConfirmButton>
           )}
-          {saved && <span className="muted">✓ Gespeichert</span>}
+          <Saved show={saved} />
         </div>
       </div>
     </Card>

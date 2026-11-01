@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, Mic, Play, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
@@ -22,9 +23,9 @@ export function PodcastCreatePage() {
   const [video, setVideo] = useState<Broadcast | null>(null);
   return (
     <>
-      <PageHeader title="🎙️ Neuer Podcast">
+      <PageHeader title="Neuer Podcast" description="Livestream wählen, Ausschnitt festlegen, Angaben prüfen.">
         <Link to="/podcast" className="btn">
-          ← Zurück
+          <ArrowLeft size={16} /> Zurück
         </Link>
       </PageHeader>
       {video ? <PodcastEditor video={video} onBack={() => setVideo(null)} /> : <SourcePicker onSelect={setVideo} />}
@@ -45,8 +46,8 @@ function SourcePicker({ onSelect }: { onSelect: (b: Broadcast) => void }) {
   return (
     <Card title="1. Vergangenen Livestream auswählen">
       {error?.code === 'no-streaming' ? (
-        <Empty>
-          Noch keine Streaming-Plattform verbunden. <Link to="/settings/livestream">Einstellungen öffnen →</Link>
+        <Empty icon={Mic} title="Noch kein YouTube-Kanal verbunden">
+          <Link to="/settings/livestream">In den Einstellungen verbinden</Link>
         </Empty>
       ) : error ? (
         <Alert>{error.message}</Alert>
@@ -56,13 +57,17 @@ function SourcePicker({ onSelect }: { onSelect: (b: Broadcast) => void }) {
             <button key={b.id} className="list-item" onClick={() => onSelect(b)}>
               {b.thumbnailUrl && <img className="thumb" src={b.thumbnailUrl} alt="" />}
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{b.title}</div>
-                <small>
+                <div className="cell-title">{b.title}</div>
+                <div className="cell-sub">
                   {fmtDate(b.actualStart ?? b.scheduledStart)}
-                  {b.planTitle ? ` · Plan: ${b.planTitle}` : ''}
-                </small>
+                  {b.planTitle ? ` · ${b.planTitle}` : ''}
+                </div>
               </div>
-              {b.hasPodcast && <Badge color="green">Podcast vorhanden</Badge>}
+              {b.hasPodcast && (
+                <Badge color="green" plain>
+                  <Check size={12} /> Podcast vorhanden
+                </Badge>
+              )}
             </button>
           ))}
           {loading && <Spinner />}
@@ -145,17 +150,17 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
           <TimeBox label="Ende" value={range[1]} onChange={setEnd} />
         </div>
         <div className="row" style={{ marginTop: 10, justifyContent: 'center' }}>
-          <Button size="small" onClick={() => setStart(player.current?.getCurrentTime() ?? 0)}>
-            ⇤ Start = Position
+          <Button size="small" icon={ArrowLeftToLine} onClick={() => setStart(player.current?.getCurrentTime() ?? 0)}>
+            Start setzen
           </Button>
-          <Button size="small" onClick={() => player.current?.seekTo(range[0], true)}>
-            ▶ Ab Start abspielen
+          <Button size="small" variant="ghost" icon={Play} onClick={() => player.current?.seekTo(range[0], true)}>
+            Ab Start
           </Button>
-          <Button size="small" onClick={() => player.current?.seekTo(Math.max(0, range[1] - 10), true)}>
-            ▶ Ende anhören
+          <Button size="small" variant="ghost" icon={SkipForward} onClick={() => player.current?.seekTo(Math.max(0, range[1] - 10), true)}>
+            Ende anhören
           </Button>
-          <Button size="small" onClick={() => setEnd(player.current?.getCurrentTime() ?? 0)}>
-            Ende = Position ⇥
+          <Button size="small" icon={ArrowRightToLine} onClick={() => setEnd(player.current?.getCurrentTime() ?? 0)}>
+            Ende setzen
           </Button>
         </div>
       </Card>

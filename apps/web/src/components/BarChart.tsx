@@ -45,7 +45,7 @@ export function BarChart({ data, series, height = 240 }: { data: { label: string
                   const y1 = y(acc + v);
                   const h = y(acc) - y1;
                   acc += v;
-                  return v > 0 ? <rect key={s.key} x={x} y={y1} width={barW} height={h} fill={s.color} rx={2} /> : null;
+                  return v > 0 ? <rect key={s.key} x={x} y={y1} width={barW} height={Math.max(0, h - 1)} style={{ fill: s.color }} rx={3} /> : null;
                 })}
                 <text x={x + barW / 2} y={height - bottom + 14} textAnchor="end" transform={`rotate(-40 ${x + barW / 2} ${height - bottom + 14})`}>
                   {d.label}

@@ -1,3 +1,4 @@
+import { Check, Copy, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, Badge, Button, Card, ConfirmButton, Empty, Field, Modal, PageHeader, Progress, Spinner } from '../components/ui';
@@ -42,35 +43,41 @@ export function PodcastPage() {
 
   return (
     <>
-      <PageHeader title="🎙️ Podcast">
+      <PageHeader title="Podcast" description="Predigten aus vergangenen Streams schneiden und veröffentlichen.">
         {can('podcast', 'create') && (
           <Link to="/podcast/new" className="btn primary">
-            ＋ Neuer Podcast
+            <Plus size={16} /> Neuer Podcast
           </Link>
         )}
       </PageHeader>
       {message && <Alert kind={message.kind}>{message.text}</Alert>}
       {integrations && !integrations.podcastHost && (
         <Alert kind="warning">
-          Es ist noch kein Podcast-Hosting (FTP) eingerichtet. <Link to="/settings/podcast">Einstellungen öffnen →</Link>
+          Es ist noch kein Podcast-Hosting (FTP) eingerichtet. <Link to="/settings/podcast">Einstellungen öffnen</Link>
         </Alert>
       )}
       {integrations && (
         <Card>
-          <div className="row between">
-            <div>
-              <div className="label">RSS-Feed für Apple Podcasts, Spotify & Co.</div>
-              <code>{integrations.feedUrl}</code>
+          <div className="row between" style={{ flexWrap: 'nowrap' }}>
+            <div className="row" style={{ flexWrap: 'nowrap', minWidth: 0 }}>
+              <span className="icon-tile">
+                <Rss size={18} />
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <div className="label">RSS-Feed für Apple Podcasts, Spotify & Co.</div>
+                <div className="cell-sub" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{integrations.feedUrl}</div>
+              </div>
             </div>
             <Button
               size="small"
+              icon={copied ? Check : Copy}
               onClick={async () => {
                 await navigator.clipboard.writeText(integrations.feedUrl);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
               }}
             >
-              {copied ? '✓ Kopiert' : 'Kopieren'}
+              {copied ? 'Kopiert' : 'Kopieren'}
             </Button>
           </div>
         </Card>
@@ -81,7 +88,7 @@ export function PodcastPage() {
         ) : loading && !data ? (
           <Spinner />
         ) : !data?.length ? (
-          <Empty>Noch keine Podcasts erstellt.</Empty>
+          <Empty icon={Mic} title="Noch keine Podcasts">Erstelle den ersten Podcast aus einem vergangenen Livestream.</Empty>
         ) : (
           <div className="table-wrap">
             <table>
@@ -99,12 +106,12 @@ export function PodcastPage() {
                   <tr key={p.id}>
                     <td style={{ width: 64 }}>{p.imageUrl && <img src={p.imageUrl} alt="" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}</td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{p.title}</div>
-                      <small>
+                      <div className="cell-title">{p.title}</div>
+                      <div className="cell-sub">
                         {p.speaker ? `${p.speaker} · ` : ''}
                         {fmtDate(p.publishedAt ?? p.createdAt)}
                         {p.fileSize ? ` · ${fmtBytes(p.fileSize)}` : ''}
-                      </small>
+                      </div>
                       {p.status === 'published' && p.audioUrl && <audio controls preload="none" src={p.audioUrl} style={{ display: 'block', marginTop: 6, height: 32, maxWidth: 320 }} />}
                       {p.error && <div style={{ color: 'var(--danger)', fontSize: '0.82rem', whiteSpace: 'pre-wrap' }}>{p.error}</div>}
                     </td>
@@ -116,17 +123,19 @@ export function PodcastPage() {
                     <td>
                       <div className="actions">
                         {p.status === 'failed' && can('podcast', 'create') && (
-                          <Button size="small" onClick={() => retry(p)}>
+                          <Button size="small" icon={RotateCcw} onClick={() => retry(p)}>
                             Neu versuchen
                           </Button>
                         )}
                         {can('podcast', 'edit') && (
-                          <Button size="small" onClick={() => setEditing(p)}>
+                          <Button size="small" icon={Pencil} onClick={() => setEditing(p)}>
                             Bearbeiten
                           </Button>
                         )}
                         {can('podcast', 'delete') && p.status !== 'processing' && (
-                          <ConfirmButton question={`Podcast „${p.title}“ inkl. Audiodatei löschen?`} onConfirm={() => remove(p)} />
+                          <ConfirmButton icon={Trash2} title="Löschen" aria-label="Löschen" question={`Podcast „${p.title}“ inkl. Audiodatei löschen?`} onConfirm={() => remove(p)}>
+                            {null}
+                          </ConfirmButton>
                         )}
                       </div>
                     </td>

@@ -1,15 +1,26 @@
+import { LayoutGrid, LogOut, Menu, Mic, Radio, Settings, Users, X, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useMe } from '../lib/auth';
 import type { ToolKey } from '../lib/types';
-import { Avatar } from './ui';
+import { Brand } from './Brand';
+import { Avatar, Button } from './ui';
 
-export const TOOL_META: Record<ToolKey, { icon: string; path: string; description: string }> = {
-  livestream: { icon: '📡', path: '/livestream', description: 'Livestreams aus Plänen erstellen und verwalten' },
-  podcast: { icon: '🎙️', path: '/podcast', description: 'Podcasts aus vergangenen Streams schneiden und veröffentlichen' },
-  visitors: { icon: '👥', path: '/visitors', description: 'Besucher erfassen und auswerten' },
+export const TOOL_META: Record<ToolKey, { icon: LucideIcon; path: string; description: string }> = {
+  livestream: { icon: Radio, path: '/livestream', description: 'Streams aus dem Plan anlegen und verwalten' },
+  podcast: { icon: Mic, path: '/podcast', description: 'Predigten aus Streams schneiden und veröffentlichen' },
+  visitors: { icon: Users, path: '/visitors', description: 'Besucher erfassen und auswerten' },
 };
+
+function NavItem({ to, icon: Icon, children, end, active }: { to: string; icon: LucideIcon; children: ReactNode; end?: boolean; active?: boolean }) {
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => `nav-link ${isActive || active ? 'active' : ''}`}>
+      <Icon size={18} strokeWidth={1.8} />
+      {children}
+    </NavLink>
+  );
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   const { me } = useMe();
@@ -26,41 +37,39 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="app">
       <div className="mobile-bar">
-        <span className="brand" style={{ padding: 0 }}>
-          <img src="/favicon.svg" alt="" /> kahal.tools
-        </span>
-        <button className="btn small" onClick={() => setOpen(true)} aria-label="Menü">
-          ☰
-        </button>
+        <Brand />
+        <Button variant="ghost" icon={Menu} onClick={() => setOpen(true)} aria-label="Menü öffnen" />
       </div>
       <aside className={`sidebar ${open ? 'open' : ''}`} onClick={() => setOpen(false)}>
-        <a href="/" className="brand">
-          <img src="/favicon.svg" alt="" /> kahal.tools
-        </a>
-        <div className="tenant">{me.tenant.name}</div>
-        <NavLink to="/" end className="nav-link">
-          🏠 Übersicht
-        </NavLink>
+        <div className="row between" style={{ flexWrap: 'nowrap' }}>
+          <Brand subtitle={me.tenant.name} />
+          {open && <Button variant="ghost" icon={X} aria-label="Menü schliessen" />}
+        </div>
+        <NavItem to="/" end icon={LayoutGrid}>
+          Übersicht
+        </NavItem>
+        {visibleTools.length > 0 && <div className="nav-section">Tools</div>}
         {visibleTools.map((t) => (
-          <NavLink key={t.key} to={TOOL_META[t.key].path} className="nav-link">
-            {TOOL_META[t.key].icon} {t.label}
-          </NavLink>
+          <NavItem key={t.key} to={TOOL_META[t.key].path} icon={TOOL_META[t.key].icon}>
+            {t.label}
+          </NavItem>
         ))}
         {canSettings && (
-          <NavLink to="/settings" className={`nav-link ${location.pathname.startsWith('/settings') ? 'active' : ''}`}>
-            ⚙️ Einstellungen
-          </NavLink>
+          <>
+            <div className="nav-section">Verwaltung</div>
+            <NavItem to="/settings" icon={Settings} active={location.pathname.startsWith('/settings')}>
+              Einstellungen
+            </NavItem>
+          </>
         )}
         <div className="nav-spacer" />
         <div className="user-box">
           <Avatar name={me.user.name} url={me.user.avatarUrl} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.user.name}</div>
-            <small>{me.user.isAdmin ? 'Administrator' : 'Benutzer'}</small>
+            <div className="name">{me.user.name}</div>
+            <small>{me.user.isAdmin ? 'Administrator' : 'Mitarbeitende'}</small>
           </div>
-          <button className="btn small ghost" onClick={logout} title="Abmelden">
-            ⎋
-          </button>
+          <Button variant="ghost" size="small" icon={LogOut} onClick={logout} title="Abmelden" aria-label="Abmelden" />
         </div>
       </aside>
       <main className="main">{children}</main>

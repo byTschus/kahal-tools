@@ -1,6 +1,6 @@
 import { CopyField } from '../../components/CopyField';
 import { OAuthAppCard, type OAuthAppStatus } from '../../components/OAuthAppCard';
-import { Alert, Button, Card, Checkbox, Field, Spinner } from '../../components/ui';
+import { Alert, Button, Card, Checkbox, Field, Spinner , Saved } from '../../components/ui';
 import { useApi } from '../../lib/api';
 import { useMe } from '../../lib/auth';
 import { useSettings } from './useSettings';
@@ -67,7 +67,7 @@ export function PlanningSettings() {
               <Button variant="primary" busy={s.busy} onClick={s.save}>
                 Speichern
               </Button>
-              {s.saved && <span className="muted">✓ Gespeichert</span>}
+              <Saved show={s.saved} />
             </div>
           </div>
         )}

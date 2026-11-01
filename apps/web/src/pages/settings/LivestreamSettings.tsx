@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { OAuthAppCard, type OAuthAppStatus } from '../../components/OAuthAppCard';
 import { SamplePlanSelect, TemplateField, useSamplePlan } from '../../components/TemplateField';
-import { Alert, Avatar, Button, Card, Checkbox, ConfirmButton, Field, Spinner } from '../../components/ui';
+import { Alert, Avatar, Button, Card, Checkbox, ConfirmButton, Field, Spinner , Saved } from '../../components/ui';
 import { api, useApi } from '../../lib/api';
 import type { Integrations } from '../../lib/types';
 import { useSettings } from './useSettings';
@@ -161,7 +161,7 @@ export function LivestreamSettings() {
               <Button variant="primary" busy={s.busy} onClick={s.save}>
                 Speichern
               </Button>
-              {s.saved && <span className="muted">✓ Gespeichert</span>}
+              <Saved show={s.saved} />
             </div>
           </div>
         </Card>

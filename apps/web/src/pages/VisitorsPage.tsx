@@ -1,3 +1,4 @@
+import { Download, Pencil, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart } from '../components/BarChart';
@@ -24,8 +25,8 @@ interface Stats {
   events: { id: string; date: string; title: string; onSite: number; livestream: number; total: number; values: Record<string, number> }[];
 }
 
-const COLORS = ['#2f5bea', '#18a999', '#f2a541', '#9b5de5', '#e15f74', '#5c9ead', '#7fb800'];
-const LIVESTREAM_COLOR = '#d63c3c';
+const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-6)'];
+const LIVESTREAM_COLOR = 'var(--chart-5)';
 
 export function VisitorsPage() {
   const can = useCan();
@@ -42,19 +43,19 @@ export function VisitorsPage() {
 
   return (
     <>
-      <PageHeader title="👥 Besucherzähler">
+      <PageHeader title="Besucherzähler" description="Besucher vor Ort und im Livestream erfassen und auswerten.">
         <a className="btn" href={`/api/visitors/export.xlsx?${query}`}>
-          ⬇ Excel
+          <Download size={16} /> Excel
         </a>
         {can('visitors', 'create') && (
-          <Button variant="primary" onClick={() => setEditing('new')}>
-            ＋ Besucher erfassen
+          <Button variant="primary" icon={Plus} onClick={() => setEditing('new')}>
+            Besucher erfassen
           </Button>
         )}
       </PageHeader>
       {locations && locations.length === 0 && (
         <Alert kind="warning">
-          Es sind noch keine Orte definiert. <Link to="/settings/visitors">In den Einstellungen Orte anlegen →</Link>
+          Es sind noch keine Orte definiert. <Link to="/settings/visitors">In den Einstellungen Orte anlegen</Link>
         </Alert>
       )}
       <Card>
@@ -79,7 +80,7 @@ export function VisitorsPage() {
           ) : loading && !counts ? (
             <Spinner />
           ) : !counts?.length ? (
-            <Empty>Keine Erfassungen im gewählten Zeitraum.</Empty>
+            <Empty icon={Users} title="Keine Erfassungen">Im gewählten Zeitraum wurden keine Besucher erfasst.</Empty>
           ) : (
             <div className="table-wrap">
               <table>
@@ -105,8 +106,8 @@ export function VisitorsPage() {
                       <tr key={c.id}>
                         <td>{fmtDate(c.eventDate)}</td>
                         <td>
-                          {c.eventTitle}
-                          {c.notes && <div><small>{c.notes}</small></div>}
+                          <div className="cell-title">{c.eventTitle}</div>
+                          {c.notes && <div className="cell-sub">{c.notes}</div>}
                         </td>
                         {columns.map((l) => (
                           <td key={l.id} className="num">
@@ -122,18 +123,21 @@ export function VisitorsPage() {
                         <td>
                           <div className="actions">
                             {can('visitors', 'edit') && (
-                              <Button size="small" onClick={() => setEditing(c)}>
-                                Bearbeiten
-                              </Button>
+                              <Button size="small" icon={Pencil} title="Bearbeiten" aria-label="Bearbeiten" onClick={() => setEditing(c)} />
                             )}
                             {can('visitors', 'delete') && (
                               <ConfirmButton
+                                icon={Trash2}
+                                title="Löschen"
+                                aria-label="Löschen"
                                 question={`Erfassung „${c.eventTitle}“ löschen?`}
                                 onConfirm={async () => {
                                   await api.del(`/api/visitors/counts/${c.id}`);
                                   void reload();
                                 }}
-                              />
+                              >
+                                {null}
+                              </ConfirmButton>
                             )}
                           </div>
                         </td>
@@ -356,7 +360,7 @@ function CountModal({ count, locations, onClose, onSaved }: { count: VisitorCoun
             ))}
           </div>
           <div className="muted">Vor Ort total: <b>{onSiteTotal}</b></div>
-          <div className="card" style={{ background: 'var(--surface-2)', boxShadow: 'none' }}>
+          <div className="card-subtle">
             <Checkbox
               checked={lsEnabled}
               onChange={(v) => {
@@ -369,8 +373,8 @@ function CountModal({ count, locations, onClose, onSaved }: { count: VisitorCoun
               <div className="stack" style={{ marginTop: 10 }}>
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
                   <input type="number" min={0} value={lsCount} onChange={(e) => setLsCount(e.target.value)} style={{ maxWidth: 140 }} />
-                  <Button size="small" busy={ls.busy} onClick={() => fetchLivestream({ eventId, videoId: lsVideoId })} disabled={!eventId && !lsVideoId}>
-                    ↻ Von YouTube lesen
+                  <Button size="small" icon={RefreshCw} busy={ls.busy} onClick={() => fetchLivestream({ eventId, videoId: lsVideoId })} disabled={!eventId && !lsVideoId}>
+                    Von YouTube lesen
                   </Button>
                   <Button size="small" variant="ghost" onClick={() => setShowBroadcasts((s) => !s)}>
                     Stream wählen

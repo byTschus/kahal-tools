@@ -1,3 +1,4 @@
+import { Braces, Eye } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { api, useApi } from '../lib/api';
 import type { PlanningEvent } from '../lib/types';
@@ -85,11 +86,11 @@ export function TemplateField({
         <input ref={ref} type="text" value={value} onChange={(e) => onChange(e.target.value)} />
       )}
       <div className="row">
-        <Button type="button" size="small" variant="ghost" onClick={() => setShowVars((s) => !s)}>
-          {showVars ? 'Variablen ausblenden' : '＋ Variable einfügen'}
+        <Button type="button" size="small" variant="ghost" icon={Braces} onClick={() => setShowVars((s) => !s)}>
+          {showVars ? 'Variablen ausblenden' : 'Variable einfügen'}
         </Button>
-        <Button type="button" size="small" variant="ghost" onClick={doPreview} disabled={!sample.eventId}>
-          👁 Vorschau
+        <Button type="button" size="small" variant="ghost" icon={Eye} onClick={doPreview} disabled={!sample.eventId}>
+          Vorschau
         </Button>
       </div>
       {showVars && (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SamplePlanSelect, TemplateField, useSamplePlan } from '../../components/TemplateField';
-import { Alert, Button, Card, Checkbox, ConfirmButton, Field, Spinner } from '../../components/ui';
+import { Alert, Button, Card, Checkbox, ConfirmButton, Field, Spinner , Saved } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
 import type { HostField, Integrations } from '../../lib/types';
 import { useSettings } from './useSettings';
@@ -113,7 +113,7 @@ export function PodcastSettings() {
               <Button variant="primary" busy={s.busy} onClick={s.save}>
                 Speichern
               </Button>
-              {s.saved && <span className="muted">✓ Gespeichert</span>}
+              <Saved show={s.saved} />
             </div>
           </Card>
         </>
