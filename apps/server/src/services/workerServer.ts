@@ -1,113 +1,92 @@
-import type { Integration } from '@prisma/client';
+import { config } from '../config.js';
 import { prisma } from '../db.js';
-import { decryptJson, encryptJson } from '../lib/crypto.js';
 import { getServer, startServer, stopServer, type OpenStackCreds } from '../providers/cloud/openstack.js';
 
 /**
  * Worker-Server nach Bedarf: Liegen Podcast-Aufträge an, wird der Cloud-Server gestartet,
  * nach einer Leerlaufzeit ohne Aufträge wieder heruntergefahren (spart Kosten).
- * Pro Gemeinde ein Server, gespeichert als Integration "workerServer".
+ * Ein gemeinsamer Server für alle Gemeinden, konfiguriert in der .env (OPENSTACK_*, WORKER_SERVER_*).
  */
 
-export interface WorkerServerConfig {
-  authUrl: string;
-  region: string | null;
-  appCredId: string;
-  serverId: string;
-  serverName: string | null;
-  autoStart: boolean;
-  autoStop: boolean;
-  idleMinutes: number;
-  state?: {
-    lastStartAt?: string | null;
-    lastStopAt?: string | null;
-    lastError?: string | null;
-    lastErrorAt?: string | null;
-  };
-}
+const cfg = config.workerServer;
+const creds: OpenStackCreds = { authUrl: cfg.authUrl, region: cfg.region, appCredId: cfg.appCredId, appCredSecret: cfg.appCredSecret };
 
-export const WORKER_SERVER_KIND = 'workerServer';
+export const workerServerEnabled = () => Boolean(cfg.appCredId && cfg.appCredSecret && cfg.serverId);
 
-export function getWorkerServer(tenantId: string) {
-  return prisma.integration.findUnique({ where: { tenantId_kind: { tenantId, kind: WORKER_SERVER_KIND } } });
-}
+/** Zustand nur im Speicher; nach einem Neustart zählt der Startzeitpunkt des Prozesses als letzte Aktivität. */
+const state: { lastStartAt: Date; lastStopAt: Date | null; lastError: string | null; lastErrorAt: Date | null } = {
+  lastStartAt: new Date(),
+  lastStopAt: null,
+  lastError: null,
+  lastErrorAt: null,
+};
 
-export function credsOf(integration: Integration): { cfg: WorkerServerConfig; creds: OpenStackCreds } {
-  const cfg = integration.config as unknown as WorkerServerConfig;
-  const secret = decryptJson<{ appCredSecret: string }>(integration.secrets)?.appCredSecret ?? '';
-  return { cfg, creds: { authUrl: cfg.authUrl, region: cfg.region, appCredId: cfg.appCredId, appCredSecret: secret } };
-}
+let busy = false;
 
-export async function saveState(integration: Integration, patch: NonNullable<WorkerServerConfig['state']>) {
-  const cfg = integration.config as unknown as WorkerServerConfig;
-  await prisma.integration.update({
-    where: { id: integration.id },
-    data: { config: { ...cfg, state: { ...cfg.state, ...patch } } as any },
-  });
-}
-
-export function encryptWorkerSecret(appCredSecret: string) {
-  return encryptJson({ appCredSecret });
-}
-
-const busy = new Set<string>();
-
-async function manage(integration: Integration) {
-  const { cfg, creds } = credsOf(integration);
-  const tenantId = integration.tenantId;
+async function manage() {
   const now = Date.now();
-
   const [pending, lastJob] = await Promise.all([
-    prisma.job.count({ where: { tenantId, status: { in: ['queued', 'processing'] }, runAfter: { lte: new Date(now + 5 * 60_000) } } }),
-    prisma.job.findFirst({ where: { tenantId }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
+    prisma.job.count({ where: { status: { in: ['queued', 'processing'] }, runAfter: { lte: new Date(now + 5 * 60_000) } } }),
+    prisma.job.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
   ]);
 
   if (pending > 0) {
     if (cfg.autoStart && (await startServer(creds, cfg.serverId))) {
-      console.log(`[worker-server] ${cfg.serverName ?? cfg.serverId} wird gestartet (${pending} Auftrag/Aufträge)`);
-      await saveState(integration, { lastStartAt: new Date().toISOString(), lastError: null });
-    } else if (cfg.state?.lastError) {
-      await saveState(integration, { lastError: null });
+      console.log(`[worker-server] wird gestartet (${pending} Auftrag/Aufträge)`);
+      state.lastStartAt = new Date();
     }
     return;
   }
 
   if (!cfg.autoStop) return;
-  const lastActivity = Math.max(lastJob?.updatedAt.getTime() ?? 0, Date.parse(cfg.state?.lastStartAt ?? '') || 0);
-  if (now - lastActivity < Math.max(5, cfg.idleMinutes) * 60_000) return;
+  const lastActivity = Math.max(lastJob?.updatedAt.getTime() ?? 0, state.lastStartAt.getTime());
+  if (now - lastActivity < cfg.idleMinutes * 60_000) return;
   if (await stopServer(creds, cfg.serverId)) {
-    console.log(`[worker-server] ${cfg.serverName ?? cfg.serverId} wird heruntergefahren (keine Aufträge)`);
-    await saveState(integration, { lastStopAt: new Date().toISOString(), lastError: null });
+    console.log('[worker-server] wird heruntergefahren (keine Aufträge)');
+    state.lastStopAt = new Date();
   }
 }
 
-async function manageSafe(integration: Integration) {
-  if (busy.has(integration.tenantId)) return;
-  busy.add(integration.tenantId);
+/** Vom Scheduler und direkt nach dem Einreihen eines Auftrags aufgerufen */
+export async function manageWorkerServer() {
+  if (!workerServerEnabled() || busy) return;
+  busy = true;
   try {
-    await manage(integration);
+    await manage();
+    state.lastError = null;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[worker-server] ${integration.tenantId}:`, message);
-    await saveState(integration, { lastError: message, lastErrorAt: new Date().toISOString() }).catch(() => {});
+    state.lastError = err instanceof Error ? err.message : String(err);
+    state.lastErrorAt = new Date();
+    console.warn('[worker-server]', state.lastError);
   } finally {
-    busy.delete(integration.tenantId);
+    busy = false;
   }
 }
 
-/** Vom Scheduler aufgerufen: alle Worker-Server prüfen */
-export async function manageWorkerServers() {
-  const list = await prisma.integration.findMany({ where: { kind: WORKER_SERVER_KIND } });
-  for (const integration of list) await manageSafe(integration);
+export async function workerServerStatus() {
+  if (!workerServerEnabled()) return { enabled: false as const };
+  let server = null;
+  let error: string | null = null;
+  try {
+    server = await getServer(creds, cfg.serverId);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
+  return { enabled: true as const, server, error, autoStart: cfg.autoStart, autoStop: cfg.autoStop, idleMinutes: cfg.idleMinutes, state };
 }
 
-/** Direkt nach dem Einreihen eines Auftrags: Server sofort starten statt auf den Scheduler zu warten */
-export async function wakeWorkerServer(tenantId: string) {
-  const integration = await getWorkerServer(tenantId);
-  if (integration) await manageSafe(integration);
+/** Manuell starten; zählt als Aktivität, der Server bleibt mindestens die Leerlaufzeit lang an */
+export async function startWorkerServer() {
+  const changed = await startServer(creds, cfg.serverId);
+  state.lastStartAt = new Date();
+  return changed;
 }
 
-export async function liveStatus(integration: Integration) {
-  const { cfg, creds } = credsOf(integration);
-  return getServer(creds, cfg.serverId);
+/** Manuell stoppen – nicht, solange ein Auftrag verarbeitet wird (auch nicht von einer anderen Gemeinde) */
+export async function stopWorkerServer() {
+  const processing = await prisma.job.count({ where: { status: 'processing' } });
+  if (processing > 0) return { changed: false, reason: 'Es wird gerade ein Podcast verarbeitet.' };
+  const changed = await stopServer(creds, cfg.serverId);
+  if (changed) state.lastStopAt = new Date();
+  return { changed };
 }

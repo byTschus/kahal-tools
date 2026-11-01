@@ -196,6 +196,7 @@ WORKER_TOKEN=...                   # zufällig, mind. 32 Zeichen – gleicher We
 # PCO_/GOOGLE_CLIENT_ID/SECRET leer lassen – die Gemeinden tragen ihre eigenen im Webinterface ein
 ENABLE_MOCK_PLANNING=false
 RUN_SCHEDULER=true
+# Optional: OPENSTACK_* / WORKER_SERVER_* – Worker-Server nur bei Bedarf starten, siehe 6.4
 ```
 
 Zufallswerte erzeugen (auf dem Server): `openssl rand -base64 48`
@@ -292,13 +293,21 @@ kahal.tools kann die Instanz automatisch starten, sobald ein Podcast in der Wart
 3. **Create** → **ID** und **Secret** kopieren. Das Secret wird nur dieses eine Mal angezeigt.
 4. Auth-URL nachschauen: **Project → API Access → Identity**, z.B. `https://api.pub1.infomaniak.cloud/identity/v3` (bei neueren Projekten `pub2`).
 
-**2. In kahal.tools eintragen:** Einstellungen → Podcast → **Worker-Server**
+**2. Instanz-ID nachschauen:** **Compute → Instances** → Name der Worker-Instanz anklicken → **ID** kopieren.
 
-1. Auth-URL, Application Credential ID und Secret eintragen (Region leer lassen).
-2. **Server laden** → die Worker-Instanz auswählen.
-3. „Automatisch starten“ und „Automatisch herunterfahren“ anhaken, Leerlaufzeit z.B. 15 Minuten → **Speichern**.
+**3. In der `.env` von kahal.tools eintragen** (auf dem Node.js-Hosting, gilt für alle Gemeinden):
 
-Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker startet den Worker automatisch → Auftrag wird verarbeitet → nach der Leerlaufzeit fährt die Instanz wieder herunter. Mit **Starten** / **Stoppen** lässt sie sich auch von Hand steuern; nach einem manuellen Start bleibt sie mindestens die Leerlaufzeit lang an.
+```
+OPENSTACK_AUTH_URL=https://api.pub1.infomaniak.cloud/identity/v3
+OPENSTACK_APP_CRED_ID=...          # ID aus Schritt 1
+OPENSTACK_APP_CRED_SECRET=...      # Secret aus Schritt 1
+WORKER_SERVER_ID=...               # ID aus Schritt 2
+WORKER_SERVER_IDLE_MINUTES=15      # herunterfahren nach 15 Minuten ohne Auftrag
+```
+
+`OPENSTACK_REGION` leer lassen (wird automatisch erkannt). Danach die Node.js-Site im Manager neu starten.
+
+Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker startet den Worker automatisch → Auftrag wird verarbeitet → nach der Leerlaufzeit fährt die Instanz wieder herunter. Unter Einstellungen → Podcast → **Worker-Server** sieht man den Status und kann die Instanz von Hand starten oder stoppen; nach einem manuellen Start bleibt sie mindestens die Leerlaufzeit lang an.
 
 > Wichtig: Den Worker auf der Instanz nicht mit `docker compose stop` anhalten – sonst startet er nach dem Hochfahren nicht automatisch. Zum Aktualisieren `docker compose up -d --build` verwenden.
 

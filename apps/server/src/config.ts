@@ -26,6 +26,17 @@ export const config = {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   },
+  /** Worker-Server in der OpenStack-Cloud nach Bedarf starten/stoppen (optional, für alle Gemeinden gemeinsam) */
+  workerServer: {
+    authUrl: process.env.OPENSTACK_AUTH_URL || 'https://api.pub1.infomaniak.cloud/identity/v3',
+    region: process.env.OPENSTACK_REGION || null,
+    appCredId: process.env.OPENSTACK_APP_CRED_ID ?? '',
+    appCredSecret: process.env.OPENSTACK_APP_CRED_SECRET ?? '',
+    serverId: process.env.WORKER_SERVER_ID ?? '',
+    autoStart: process.env.WORKER_SERVER_AUTO_START !== 'false',
+    autoStop: process.env.WORKER_SERVER_AUTO_STOP !== 'false',
+    idleMinutes: Math.max(5, Number(process.env.WORKER_SERVER_IDLE_MINUTES ?? 15) || 15),
+  },
 };
 
 if (isProduction) {

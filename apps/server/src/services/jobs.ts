@@ -1,6 +1,6 @@
 import type { Job } from '@prisma/client';
 import { prisma } from '../db.js';
-import { wakeWorkerServer } from './workerServer.js';
+import { manageWorkerServer } from './workerServer.js';
 
 /**
  * Einfache, datenbankbasierte Warteschlange.
@@ -26,7 +26,7 @@ const LOCK_TIMEOUT_MS = 10 * 60_000;
 
 export async function enqueueJob(tenantId: string, type: string, refId?: string) {
   const job = await prisma.job.create({ data: { tenantId, type, refId } });
-  void wakeWorkerServer(tenantId);
+  void manageWorkerServer();
   return job;
 }
 

@@ -1,7 +1,7 @@
 import { prisma } from '../db.js';
 import { streamingFor } from './integrations.js';
 import { recoverStaleJobs } from './jobs.js';
-import { manageWorkerServers } from './workerServer.js';
+import { manageWorkerServer } from './workerServer.js';
 
 /**
  * Hintergrundaufgaben im Server-Prozess:
@@ -21,7 +21,7 @@ export function startScheduler() {
     }
   };
   const tick = () => {
-    void run('jobs', recoverStaleJobs).then(() => run('worker-server', manageWorkerServers));
+    void run('jobs', recoverStaleJobs).then(() => run('worker-server', manageWorkerServer));
     void run('livestreams', pollLivestreams);
   };
   setTimeout(tick, 10_000);
