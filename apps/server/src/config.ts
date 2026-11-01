@@ -28,11 +28,11 @@ export const config = {
   },
   /** E-Mail-Versand (z.B. Einladungen). Ohne SMTP_HOST werden keine E-Mails verschickt. */
   smtp: {
-    host: process.env.SMTP_HOST ?? '',
-    port: Number(process.env.SMTP_PORT || 465),
-    /** true = TLS ab Verbindungsbeginn (Port 465), false = STARTTLS (Port 587) */
-    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : Number(process.env.SMTP_PORT || 465) === 465,
-    user: process.env.SMTP_USER ?? '',
+    host: (process.env.SMTP_HOST ?? '').trim(),
+    port: Number(process.env.SMTP_PORT?.trim() || 465),
+    /** true = TLS ab Verbindungsbeginn (Port 465), false = STARTTLS (Port 587); leer = nach Port */
+    secure: process.env.SMTP_SECURE?.trim() ? process.env.SMTP_SECURE.trim() === 'true' : Number(process.env.SMTP_PORT?.trim() || 465) === 465,
+    user: (process.env.SMTP_USER ?? '').trim(),
     password: process.env.SMTP_PASSWORD ?? '',
     /** Absender, z.B. "kahal.tools <noreply@deine-domain.ch>" (Standard: SMTP_USER) */
     from: process.env.MAIL_FROM || process.env.SMTP_USER || '',
