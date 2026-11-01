@@ -108,6 +108,10 @@ Benötigte Rechte (werden beim Login abgefragt): `people` (Person & Gemeinde erk
 
 ---
 
+### Benötigte Rechte in Planning Center
+
+Wer kahal.tools benutzt, braucht in Planning Center **Zugriff auf Services** (Pläne, Teams, Items). Zugriff auf **People** ist nicht nötig. Ohne People-Zugriff gilt beim Einladen: Die Personensuche läuft über Services, E-Mail-Adressen sind dort nicht sichtbar und werden im Einladen-Dialog von Hand eingetragen.
+
 ## 4. Google / YouTube API pro Gemeinde
 
 Auch die Google-Zugangsdaten werden pro Gemeinde im Webinterface eingetragen: **Einstellungen → Livestream → Google / YouTube API-Zugangsdaten** (dort steht die Anleitung auch noch einmal).
@@ -219,6 +223,13 @@ MAIL_FROM="kahal.tools <noreply@deine-domain.ch>"
 ```
 
 3. Site neu starten und eine Person einladen. Antworten auf die E-Mail gehen an die einladende Person (Reply-To).
+
+**E-Mails landen im Junk-Ordner?** Das liegt meist an der noch jungen Domain und an fehlender Signatur:
+
+* Als Absender (`MAIL_FROM`) dieselbe Adresse wie `SMTP_USER` verwenden (oder einen Alias davon).
+* Im Manager unter **Mail → Domain → DKIM** die DKIM-Signatur aktivieren (SPF `include:spf.infomaniak.ch` und DMARC sind bei kahal.tools bereits gesetzt).
+* Mit <https://www.mail-tester.com> prüfen: eine Person mit der dort angezeigten Adresse einladen und das Ergebnis ansehen.
+* Den Empfängern sagen, sie sollen die Mail als „Kein Junk“ markieren.
 
 Lokal fängt Mailpit alle E-Mails ab: `docker compose up -d mail`, in der `.env` `SMTP_HOST=localhost`, `SMTP_PORT=1025`, `SMTP_SECURE=false`, Posteingang unter <http://localhost:8025>.
 

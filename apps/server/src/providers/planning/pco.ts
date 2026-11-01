@@ -327,21 +327,52 @@ class PcoClient implements PlanningClient {
     };
   }
 
+  /**
+   * Personen suchen (zum Einladen). Mit Zugriff auf "People" inkl. E-Mail-Adressen; wer nur Services hat,
+   * sucht in den Services-Personen (gleiche Personen-IDs, aber ohne E-Mail).
+   */
   async searchPeople(query: string) {
-    const params = new URLSearchParams({ 'where[search_name_or_email]': query, include: 'emails', per_page: '25' });
-    const doc = await this.get(`/people/v2/people?${params}`);
-    const emails = new Map((doc.included ?? []).filter((r) => r.type === 'Email').map((e) => [e.id, e.attributes]));
-    return (Array.isArray(doc.data) ? doc.data : [doc.data]).map((p) => {
-      const refs = p.relationships?.emails?.data;
-      const list = (Array.isArray(refs) ? refs : []).map((r) => emails.get(r.id)).filter(Boolean) as Record<string, any>[];
-      return {
-        externalId: p.id,
-        name: p.attributes.name,
-        email: (list.find((e) => e.primary) ?? list[0])?.address,
-        avatarUrl: p.attributes.avatar,
-      };
-    });
+    try {
+      const params = new URLSearchParams({ 'where[search_name_or_email]': query, include: 'emails', per_page: '25' });
+      const doc = await this.get(`/people/v2/people?${params}`);
+      const emails = new Map((doc.included ?? []).filter((r) => r.type === 'Email').map((e) => [e.id, e.attributes]));
+      return (Array.isArray(doc.data) ? doc.data : [doc.data]).map((p) => {
+        const refs = p.relationships?.emails?.data;
+        const list = (Array.isArray(refs) ? refs : []).map((r) => emails.get(r.id)).filter(Boolean) as Record<string, any>[];
+        return {
+          externalId: p.id,
+          name: p.attributes.name,
+          email: (list.find((e) => e.primary) ?? list[0])?.address,
+          avatarUrl: p.attributes.avatar,
+        };
+      });
+    } catch (err) {
+      if ((err as HttpError).status === 401) throw err;
+      return this.searchServicesPeople(query);
+    }
   }
+
+  private async searchServicesPeople(query: string) {
+    const toPerson = (p: JsonApiResource) => ({
+      externalId: p.id,
+      name: p.attributes.full_name ?? `${p.attributes.first_name ?? ''} ${p.attributes.last_name ?? ''}`.trim(),
+      email: undefined as string | undefined,
+      avatarUrl: p.attributes.photo_thumbnail_url ?? undefined,
+    });
+    const active = (p: JsonApiResource) => !p.attributes.archived_at && p.attributes.status !== 'inactive';
+    try {
+      const params = new URLSearchParams({ 'where[search_name_or_email]': query, per_page: '25' });
+      const doc = await this.get(`/services/v2/people?${params}`);
+      return (Array.isArray(doc.data) ? doc.data : [doc.data]).filter(active).map(toPerson);
+    } catch (err) {
+      if ((err as HttpError).status === 401) throw err;
+      // Falls die Suche nicht unterstützt wird: Personenliste laden und selbst filtern
+      const { data } = await this.getAll('/services/v2/people?per_page=100&order=last_name', 10);
+      const q = query.toLowerCase();
+      return data.filter(active).map(toPerson).filter((p) => p.name.toLowerCase().includes(q)).slice(0, 25);
+    }
+  }
+
 }
 
 /**

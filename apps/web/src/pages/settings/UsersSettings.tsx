@@ -357,6 +357,10 @@ function InviteModal({
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [person, setPerson] = useState<Person | null>(null);
+  // E-Mail für die Einladung: aus dem Planungstool vorbelegt, sonst von Hand (z.B. ohne Zugriff auf PCO People)
+  const [email, setEmail] = useState('');
+  useEffect(() => setEmail(person?.email ?? ''), [person]);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [perms, setPerms] = useState<PermissionMap>({});
   const save = useAction();
@@ -373,13 +377,13 @@ function InviteModal({
       api.post<{ invite: InviteResult }>('/api/users/invite', {
         externalPersonId: person.externalId,
         name: person.name,
-        email: person.email ?? null,
+        email: emailOk ? email.trim() : null,
         avatarUrl: person.avatarUrl ?? null,
         groupIds,
         permissions: perms,
       }),
     );
-    if (res) onInvited(person, res.invite);
+    if (res) onInvited({ ...person, email: emailOk ? email.trim() : undefined }, res.invite);
   };
 
   return (
@@ -393,8 +397,8 @@ function InviteModal({
             <Button variant="ghost" icon={ArrowLeft} onClick={() => setPerson(null)}>
               Andere Person
             </Button>
-            <Button variant="primary" icon={mailEnabled && person.email ? Mail : undefined} busy={save.busy} onClick={submit}>
-              {mailEnabled && person.email ? 'Einladen und E-Mail senden' : 'Einladen'}
+            <Button variant="primary" icon={mailEnabled && emailOk ? Mail : undefined} busy={save.busy} onClick={submit} disabled={email.trim() !== '' && !emailOk}>
+              {mailEnabled && emailOk ? 'Einladen und E-Mail senden' : 'Einladen'}
             </Button>
           </>
         ) : null
@@ -430,11 +434,20 @@ function InviteModal({
             <Avatar name={person.name} url={person.avatarUrl} />
             <div>
               <b>{person.name}</b>
-              <div>
-                <small>{person.email}</small>
-              </div>
             </div>
           </div>
+          <Field
+            label="E-Mail für die Einladung"
+            hint={
+              mailEnabled
+                ? person.email
+                  ? 'Aus dem Planungstool übernommen, kann angepasst werden.'
+                  : 'Im Planungstool nicht sichtbar. Ohne Adresse wird der Login-Link zum Kopieren angezeigt.'
+                : 'E-Mail-Versand ist nicht eingerichtet (SMTP in der .env). Der Login-Link wird zum Kopieren angezeigt.'
+            }
+          >
+            <input type="email" value={email} placeholder="name@beispiel.ch" onChange={(e) => setEmail(e.target.value)} />
+          </Field>
           {groups.length > 0 && (
             <Field label="Gruppen">
               <div className="row">
