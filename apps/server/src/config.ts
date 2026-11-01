@@ -1,0 +1,40 @@
+function env(name: string, fallback?: string): string {
+  const value = process.env[name] ?? fallback;
+  if (value === undefined || value === '') {
+    throw new Error(`Umgebungsvariable ${name} fehlt (siehe .env.example)`);
+  }
+  return value;
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+export const config = {
+  isProduction,
+  port: Number(process.env.PORT ?? 3000),
+  appUrl: env('APP_URL', 'http://localhost:5173').replace(/\/$/, ''),
+  sessionSecret: env('SESSION_SECRET'),
+  encryptionKey: env('ENCRYPTION_KEY'),
+  workerToken: process.env.WORKER_TOKEN ?? '',
+  runScheduler: process.env.RUN_SCHEDULER !== 'false',
+  migrateOnStart: process.env.MIGRATE_ON_START !== 'false',
+  enableMockPlanning: process.env.ENABLE_MOCK_PLANNING === 'true' && !isProduction,
+  pco: {
+    clientId: process.env.PCO_CLIENT_ID ?? '',
+    clientSecret: process.env.PCO_CLIENT_SECRET ?? '',
+  },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+  },
+};
+
+if (isProduction) {
+  for (const [name, value] of [
+    ['SESSION_SECRET', config.sessionSecret],
+    ['ENCRYPTION_KEY', config.encryptionKey],
+  ] as const) {
+    if (value.length < 32 || value.startsWith('change-me')) {
+      throw new Error(`${name} muss in Produktion ein zufälliger String mit mind. 32 Zeichen sein`);
+    }
+  }
+}

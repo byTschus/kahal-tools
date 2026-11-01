@@ -1,0 +1,70 @@
+# Lokale Entwicklungsumgebung
+#
+#   docker compose up -d db                 -> nur Datenbank (Node läuft direkt unter Windows / VS Code)
+#   docker compose --profile app up         -> Datenbank + App (Server + Web mit Hot Reload) im Container
+#   docker compose --profile worker up      -> zusätzlich den Podcast-Worker starten
+#
+# Alternative: VS Code "Dev Containers: Reopen in Container" (siehe .devcontainer/)
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: kahal
+      MARIADB_USER: kahal
+      MARIADB_PASSWORD: kahal
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    working_dir: /workspace
+    command: sh -c "npm install && npm run db:deploy && npm run dev"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: mysql://kahal:kahal@db:3306/kahal
+      VITE_HOST: 0.0.0.0
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    volumes:
+      - .:/workspace:cached
+      - node_modules:/workspace/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    profiles: ["worker"]
+    build:
+      context: apps/worker
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Server läuft auf dem Windows-Host -> host.docker.internal; im App-Container -> http://app:3000
+      SERVER_URL: ${WORKER_SERVER_URL:-http://host.docker.internal:3000}
+      WORKER_CONCURRENCY: 1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  db-data:
+  node_modules:

@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Server debuggen",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "--env-file-if-exists=../../.env", "src/index.ts"],
+      "cwd": "${workspaceFolder}/apps/server",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Worker debuggen",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "--env-file-if-exists=../../.env", "src/index.ts"],
+      "cwd": "${workspaceFolder}/apps/worker",
+      "console": "integratedTerminal",
+      "env": { "SERVER_URL": "http://localhost:3000" },
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

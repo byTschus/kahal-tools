@@ -1,0 +1,25 @@
+# Produktiv-Betrieb des Podcast-Workers auf dem Public-Cloud-Server (Infomaniak)
+#
+#   cp .env.example .env   # Werte eintragen
+#   docker compose up -d --build
+#   docker compose logs -f
+services:
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # optional: cookies.txt für YouTube (siehe docs/SETUP.md, Abschnitt "YouTube blockiert den Download")
+      - ./data:/data
+      - worker-tmp:/tmp/kahal
+    stop_grace_period: 20s
+    # Begrenzt, damit auch die kleinste Instanz stabil bleibt
+    mem_limit: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  worker-tmp:

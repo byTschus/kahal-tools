@@ -1,0 +1,8 @@
+# Ergänzung zu ../docker-compose.yml für VS Code Dev Containers:
+# Der App-Container bleibt einfach laufen, gestartet wird im VS Code Terminal mit "npm run dev".
+services:
+  app:
+    command: sleep infinity
+  worker:
+    environment:
+      SERVER_URL: http://app:3000

@@ -1,0 +1,241 @@
+// Datenmodell kahal.tools
+// Mandantenfähig: alle Daten hängen an einem Tenant (= Gemeinde).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// Eine Gemeinde. Wird beim ersten Login automatisch anhand der Organisation im Planungstool angelegt.
+model Tenant {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  name             String
+  /// Schlüssel des Planungstools, z.B. "pco"
+  planningProvider String
+  /// ID der Organisation im Planungstool
+  externalOrgId    String
+  timeZone         String   @default("Europe/Zurich")
+  avatarUrl        String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users          User[]
+  groups         Group[]
+  integrations   Integration[]
+  toolSettings   ToolSetting[]
+  livestreams    Livestream[]
+  podcasts       Podcast[]
+  jobs           Job[]
+  visitorPlaces  VisitorLocation[]
+  visitorCounts  VisitorCount[]
+
+  @@unique([planningProvider, externalOrgId])
+}
+
+model User {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// ID der Person im Planungstool
+  externalPersonId String
+  name             String
+  email            String?
+  avatarUrl        String?   @db.Text
+  isAdmin          Boolean   @default(false)
+  /// active | invited | pending | disabled
+  status           String    @default("active")
+  /// { "livestream": ["view","create",...], ... }
+  permissions      Json?
+  /// Verschlüsselte OAuth-Tokens des Planungstools
+  planningAuth     String?   @db.Text
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  groups GroupMember[]
+
+  @@unique([tenantId, externalPersonId])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  permissions Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members GroupMember[]
+
+  @@unique([tenantId, name])
+}
+
+model GroupMember {
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+/// Verknüpfter externer Dienst (Streaming-Plattform, Podcast-Hosting, ...).
+model Integration {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// streaming | podcastHost
+  kind      String
+  /// youtube | ftp | ...
+  provider  String
+  label     String?
+  /// Nicht geheime Konfiguration
+  config    Json?
+  /// Verschlüsselte Zugangsdaten (JSON)
+  secrets   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, kind])
+}
+
+/// Einstellungen pro Tool (JSON, Defaults siehe src/settings.ts)
+model ToolSetting {
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tool      String
+  data      Json
+  updatedAt DateTime @updatedAt
+
+  @@id([tenantId, tool])
+}
+
+/// Lokale Referenz auf einen Livestream (für Event-Zuordnung und Zuschauerstatistik)
+model Livestream {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider       String
+  externalId     String
+  planId         String?
+  planTitle      String?
+  title          String    @db.VarChar(255)
+  scheduledStart DateTime?
+  status         String?
+  peakConcurrent Int?
+  viewCount      Int?
+  lastPolledAt   DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, provider, externalId])
+  @@index([scheduledStart])
+  @@index([tenantId, planId])
+}
+
+model Podcast {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceProvider String
+  sourceVideoId  String
+  planId         String?
+  title          String    @db.VarChar(255)
+  speaker        String?
+  description    String?   @db.Text
+  imageUrl       String?   @db.Text
+  startSec       Int
+  endSec         Int
+  fileName       String?
+  audioUrl       String?   @db.Text
+  fileSize       Int?
+  durationSec    Int?
+  /// queued | processing | published | failed
+  status         String    @default("queued")
+  progress       Int       @default(0)
+  error          String?   @db.Text
+  publishedAt    DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([tenantId, createdAt])
+}
+
+/// Warteschlange für Hintergrundaufträge (z.B. Podcast schneiden). Wird von Workern abgeholt.
+model Job {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type        String
+  refId       String?
+  /// queued | processing | done | failed
+  status      String    @default("queued")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAfter    DateTime  @default(now())
+  lockedBy    String?
+  lockedAt    DateTime?
+  progress    Int       @default(0)
+  message     String?   @db.Text
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  finishedAt  DateTime?
+
+  @@index([status, runAfter])
+  @@index([refId])
+}
+
+model VisitorLocation {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  values VisitorCountValue[]
+}
+
+model VisitorCount {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId            String?
+  eventTitle        String
+  eventDate         DateTime
+  livestreamEnabled Boolean  @default(false)
+  /// concurrent | views
+  livestreamMode    String?
+  livestreamVideoId String?
+  livestreamCount   Int?
+  notes             String?  @db.Text
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  values VisitorCountValue[]
+
+  @@index([tenantId, eventDate])
+}
+
+model VisitorCountValue {
+  countId    String
+  count      VisitorCount    @relation(fields: [countId], references: [id], onDelete: Cascade)
+  locationId String
+  location   VisitorLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  value      Int
+
+  @@id([countId, locationId])
+  @@index([locationId])
+}
