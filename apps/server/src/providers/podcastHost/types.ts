@@ -1,6 +1,6 @@
 /**
  * Schnittstelle für Podcast-Hosting (FTP, später z.B. Podigee, Spotify for Creators, S3 ...).
- * Alle Uploads (MP3, PDF, feed.xml) macht der Worker (apps/worker/src/hosts). Der Server nutzt nur
+ * Alle Uploads (MP3, feed.xml) macht der Worker (apps/worker/src/hosts). Der Server nutzt nur
  * Aktionen ohne Datenverbindung: Verbindungstest und Löschen.
  */
 

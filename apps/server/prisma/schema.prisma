@@ -179,11 +179,6 @@ model Podcast {
   endSec         Int?
   fileName       String?
   audioUrl       String?   @db.Text
-  /// Optionales PDF (z.B. Predigtnotizen), liegt neben der MP3 auf dem Podcast-Hosting
-  pdfFileName    String?
-  pdfUrl         String?   @db.Text
-  /// pending | uploaded | failed
-  pdfStatus      String?
   /// Aus einem bestehenden RSS-Feed importiert
   imported       Boolean   @default(false)
   /// GUID aus dem importierten Feed (verhindert doppelte Importe)

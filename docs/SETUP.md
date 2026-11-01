@@ -328,11 +328,11 @@ Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker starte
    * **Podcast → Feed importieren:** Adresse des bisherigen RSS-Feeds eingeben. Die Episoden erscheinen in der Liste und im neuen Feed; die Audiodateien bleiben beim bisherigen Anbieter.
    * **Besucherzähler → Importieren:** CSV- oder Excel-Datei mit den Spalten `Datum`, optional `Uhrzeit`, `Titel`, `Livestream`, `Bemerkung` und je einer Spalte pro Ort. Die Vorschau zeigt, wie jede Spalte verstanden wird.
    * Importierte Einträge brauchen keinen Plan. Beim Bearbeiten lässt sich einer verknüpfen.
-8. **Podcast → Einbetten:** iframe-Code für die Webseite kopieren. Er zeigt die neueste Predigt mit Player, Video- und PDF-Link.
+8. **Podcast → Einbetten:** iframe-Code für die Webseite kopieren. Er zeigt die neueste Predigt mit Player und Video-Link.
 
 > **Ein Plan, ein Eintrag:** Jeder neue Livestream, Podcast und jede Besucher-Erfassung gehört zu genau einem Plan, und jeder Plan kann pro Tool nur einmal verwendet werden. Bereits verwendete Pläne sind in der Auswahl ausgegraut.
 
-> **Dateinamen:** MP3 und PDF heissen nach dem Erstellungszeitpunkt in Sekunden seit 1970, z.B. `1787908529.mp3` und `1787908529.pdf`.
+> **Dateinamen:** Die MP3-Dateien heissen nach dem Erstellungszeitpunkt in Sekunden seit 1970, z.B. `1787908529.mp3`.
 
 > **Gleichzeitige Zuschauer:** YouTube liefert diese Zahl nur **während** des Streams. kahal.tools fragt sie bei Streams, die über das Tool erstellt wurden, alle 2 Minuten ab und speichert den Spitzenwert.
 
@@ -363,8 +363,6 @@ npm ci --include=dev && npm run build
 
 Dann die Site im Manager neu starten. Datenbank-Migrationen laufen beim Start automatisch.
 
-Hochgeladene PDFs liegen kurz in `apps/server/data/uploads`, bis der Worker sie auf das Podcast-Hosting überträgt. Ein anderer Ort lässt sich mit `DATA_DIR` in der `.env` festlegen.
-
 **Worker (Public Cloud):**
 
 ```bash
@@ -372,7 +370,7 @@ cd ~/kahal-tools && git pull
 cd apps/worker && docker compose up -d --build
 ```
 
-Server und Worker immer zusammen aktualisieren: Neue Auftragsarten (z.B. PDF-Upload) bearbeitet nur ein aktueller Worker; bis dahin bleiben sie in der Warteschlange.
+Server und Worker immer zusammen aktualisieren: Neue Auftragsarten (z.B. feed.xml-Upload) bearbeitet nur ein aktueller Worker; bis dahin bleiben sie in der Warteschlange.
 
 ---
 
@@ -387,7 +385,7 @@ Server und Worker immer zusammen aktualisieren: Neue Auftragsarten (z.B. PDF-Upl
 | Nach Änderung der PCO-Zugangsdaten: „Bitte neu anmelden“ | Erwartet – Tokens gehören zur alten App. Einmal ab- und wieder anmelden. |
 | YouTube muss jede Woche neu verbunden werden | Google-App ist noch im Status „Testing“ → in Produktion stellen (siehe 4). |
 | Podcast bleibt „In Warteschlange“ | Läuft der Worker? `docker compose logs -f` auf der Cloud-Instanz. Stimmen `SERVER_URL` und `WORKER_TOKEN`? |
-| FTP-Test meldete früher „Timeout when trying to open data connection“ | Das Infomaniak-Webhosting lässt keine passiven FTP-Datenverbindungen nach aussen zu. Der Verbindungstest prüft deshalb nur über Port 21 (Anmeldung, Verzeichnis, Schreibrechte). Alle Uploads (MP3, PDF, feed.xml) macht der Worker, Löschen funktioniert auch über Port 21. |
+| FTP-Test meldete früher „Timeout when trying to open data connection“ | Das Infomaniak-Webhosting lässt keine passiven FTP-Datenverbindungen nach aussen zu. Der Verbindungstest prüft deshalb nur über Port 21 (Anmeldung, Verzeichnis, Schreibrechte). Alle Uploads (MP3, feed.xml) macht der Worker, Löschen funktioniert auch über Port 21. |
 | Worker-Fehler „Sign in to confirm you're not a bot“ | YouTube blockiert Downloads von Rechenzentrums-IPs teilweise. Zuerst IPv6 einrichten (Abschnitt 6.3). Falls das nicht reicht: Mit einem (Zweit-)Google-Konto im Browser bei YouTube anmelden, Cookies mit einer Erweiterung wie „Get cookies.txt LOCALLY“ als `cookies.txt` exportieren und auf der Instanz nach `~/kahal-tools/apps/worker/data/cookies.txt` kopieren (`scp cookies.txt ubuntu@IP:~/kahal-tools/apps/worker/data/`). Der Worker verwendet die Datei automatisch. Cookies laufen nach einiger Zeit ab und müssen dann erneuert werden. |
 | Worker-Fehler bei YouTube nach längerer Zeit | `yt-dlp` ist veraltet → Worker neu starten (aktualisiert sich beim Start) oder `docker compose build --no-cache && docker compose up -d`. |
 | „Datei konnte auf dem Server nicht gelöscht werden“ | FTP-Benutzer braucht Löschrechte im Podcast-Verzeichnis. |

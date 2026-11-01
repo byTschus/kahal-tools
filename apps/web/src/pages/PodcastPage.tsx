@@ -1,4 +1,4 @@
-import { Check, Code, Copy, Download, FileText, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
+import { Check, Code, Copy, Download, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PlanLink, type PlanRef } from '../components/PlanLink';
@@ -7,7 +7,6 @@ import { api, useAction, useApi } from '../lib/api';
 import { useCan, useMe } from '../lib/auth';
 import { fmtBytes, fmtDate, fmtDuration, fromLocalInput, toLocalInput } from '../lib/format';
 import type { Integrations, Podcast } from '../lib/types';
-import { PdfInput } from './PodcastCreatePage';
 
 const STATUS: Record<Podcast['status'], { label: string; color?: 'green' | 'red' | 'blue' | 'yellow' }> = {
   queued: { label: 'In Warteschlange', color: 'yellow' },
@@ -27,8 +26,8 @@ export function PodcastPage() {
   const [embedding, setEmbedding] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'warning'; text: string } | null>(null);
 
-  // Solange Podcasts oder PDFs verarbeitet werden, regelmässig aktualisieren
-  const pending = data?.some((p) => p.status === 'queued' || p.status === 'processing' || p.pdfStatus === 'pending');
+  // Solange Podcasts verarbeitet werden, regelmässig aktualisieren
+  const pending = data?.some((p) => p.status === 'queued' || p.status === 'processing');
   useEffect(() => {
     if (!pending) return;
     const t = setInterval(() => void reload(), 5000);
@@ -122,7 +121,6 @@ export function PodcastPage() {
                         <Badge color={STATUS[p.status].color}>{STATUS[p.status].label}</Badge>
                         {p.status === 'processing' && <Progress value={p.progress} />}
                         {p.imported && <Badge plain>Importiert</Badge>}
-                        <PdfBadge podcast={p} />
                       </div>
                     </td>
                     <td className="num">{fmtDuration(durationOf(p))}</td>
@@ -162,9 +160,9 @@ export function PodcastPage() {
         <PodcastEditModal
           podcast={editing}
           onClose={() => setEditing(null)}
-          onSaved={(warning) => {
+          onSaved={() => {
             setEditing(null);
-            setMessage(warning ? { kind: 'warning', text: warning } : { kind: 'success', text: 'Podcast wurde gespeichert.' });
+            setMessage({ kind: 'success', text: 'Podcast wurde gespeichert.' });
             void reload();
           }}
         />
@@ -184,18 +182,6 @@ export function PodcastPage() {
   );
 }
 
-function PdfBadge({ podcast: p }: { podcast: Podcast }) {
-  if (p.pdfStatus === 'uploaded' && p.pdfUrl)
-    return (
-      <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="meta">
-        <FileText size={14} /> PDF
-      </a>
-    );
-  if (p.pdfStatus === 'pending') return <Badge color="yellow">PDF wird hochgeladen</Badge>;
-  if (p.pdfStatus === 'failed') return <Badge color="red">PDF-Upload fehlgeschlagen</Badge>;
-  return null;
-}
-
 function CopyButton({ text, label = 'Kopieren' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -213,7 +199,7 @@ function CopyButton({ text, label = 'Kopieren' }: { text: string; label?: string
   );
 }
 
-function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onClose: () => void; onSaved: (warning?: string) => void }) {
+function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
     title: podcast.title,
     speaker: podcast.speaker ?? '',
@@ -223,25 +209,18 @@ function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onC
     publishedAt: toLocalInput(podcast.publishedAt),
   });
   const [plan, setPlan] = useState<PlanRef | null>(podcast.planId ? { id: podcast.planId, title: podcast.planTitle } : null);
-  const [pdf, setPdf] = useState<File | null>(null);
-  const [removePdf, setRemovePdf] = useState(false);
   const save = useAction();
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
-  const hasPdf = Boolean(podcast.pdfStatus);
 
   const submit = async () => {
-    let warning: string | undefined;
-    const ok = await save.run(async () => {
-      await api.patch(`/api/podcasts/${podcast.id}`, {
+    const ok = await save.run(() =>
+      api.patch(`/api/podcasts/${podcast.id}`, {
         ...form,
         publishedAt: form.publishedAt ? fromLocalInput(form.publishedAt) : undefined,
         ...((plan?.id ?? null) !== podcast.planId ? { eventId: plan?.id ?? null, eventTitle: plan?.title ?? null } : {}),
-      });
-      if (pdf) await api.upload(`/api/podcasts/${podcast.id}/pdf`, pdf, 'application/pdf');
-      else if (removePdf) warning = (await api.del<{ warning?: string }>(`/api/podcasts/${podcast.id}/pdf`)).warning;
-      return true;
-    });
-    if (ok) onSaved(warning);
+      }),
+    );
+    if (ok) onSaved();
   };
 
   return (
@@ -274,30 +253,6 @@ function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onC
       </Field>
       <Field label="Bild-URL">
         <input type="text" value={form.imageUrl} onChange={set('imageUrl')} />
-      </Field>
-      <Field label="PDF" hint="Wird neben der MP3 auf dem Podcast-Server gespeichert">
-        {hasPdf && !pdf && !removePdf ? (
-          <div className="row">
-            <PdfBadge podcast={podcast} />
-            <small>{podcast.pdfFileName}</small>
-            <Button size="small" variant="ghost" onClick={() => setRemovePdf(true)}>
-              Entfernen
-            </Button>
-            <PdfInput file={null} onChange={setPdf} />
-          </div>
-        ) : (
-          <div className="row">
-            <PdfInput file={pdf} onChange={setPdf} />
-            {removePdf && (
-              <>
-                <small>PDF wird beim Speichern entfernt.</small>
-                <Button size="small" variant="ghost" onClick={() => setRemovePdf(false)}>
-                  Rückgängig
-                </Button>
-              </>
-            )}
-          </div>
-        )}
       </Field>
       {podcast.status === 'published' && (
         <Field label="Veröffentlicht am" hint="Bestimmt die Reihenfolge im Feed">
@@ -398,7 +353,7 @@ function EmbedModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Podcast einbetten" wide onClose={onClose}>
       <p className="muted">
-        Zeigt die neueste Predigt mit Player, Video- und PDF-Link auf eurer Webseite. Mit den Pfeilen lässt sich durch ältere Predigten blättern. Den Code einfach in
+        Zeigt die neueste Predigt mit Player und Video-Link auf eurer Webseite. Mit den Pfeilen lässt sich durch ältere Predigten blättern. Den Code einfach in
         die Webseite einfügen.
       </p>
       <Tabs

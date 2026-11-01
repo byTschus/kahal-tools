@@ -1,5 +1,4 @@
-import express, { Router } from 'express';
-import { rm, writeFile } from 'node:fs/promises';
+import { Router } from 'express';
 import { z } from 'zod';
 import { requirePerm, tid } from '../auth/middleware.js';
 import { prisma } from '../db.js';
@@ -10,7 +9,7 @@ import { podcastHostFor, requirePodcastHost, requireStreaming } from '../service
 import { enqueueJob } from '../services/jobs.js';
 import { assertPlanFree } from '../services/planLinks.js';
 import { planningClientFor } from '../services/planning.js';
-import { fileBaseOf, nextFileBase, PODCAST_JOB, PODCAST_PDF_JOB, pdfUploadPath, syncFeed } from '../services/podcasts.js';
+import { nextFileBase, PODCAST_JOB, syncFeed } from '../services/podcasts.js';
 import { getSettings, saveSettings } from '../settings.js';
 
 export const podcastsRouter = Router();
@@ -182,58 +181,12 @@ podcastsRouter.delete('/api/podcasts/:id', requirePerm('podcast', 'delete'), asy
   const tenantId = tid(req);
   const podcast = await findPodcast(tenantId, String(req.params.id));
   if (podcast.status === 'processing') throw new HttpError(400, 'Der Podcast wird gerade verarbeitet – bitte warten');
-  const warnings: string[] = [];
   // Importierte Episoden: die Audiodatei liegt beim bisherigen Anbieter und bleibt unangetastet
-  if (podcast.status === 'published' && !podcast.imported) {
-    const w = await deleteHostFile(tenantId, podcast.fileName);
-    if (w) warnings.push(w);
-  }
-  if (podcast.pdfStatus === 'uploaded') {
-    const w = await deleteHostFile(tenantId, podcast.pdfFileName);
-    if (w) warnings.push(w);
-  }
-  await rm(await pdfUploadPath(podcast.id), { force: true });
+  const warning = podcast.status === 'published' && !podcast.imported ? await deleteHostFile(tenantId, podcast.fileName) : undefined;
   await prisma.job.deleteMany({ where: { refId: podcast.id, status: { in: ['queued', 'failed'] } } });
   await prisma.podcast.delete({ where: { id: podcast.id } });
   await syncFeed(tenantId);
-  res.json({ ok: true, warning: warnings.join('\n') || undefined });
-});
-
-// ----- PDF -----
-
-const MAX_PDF_MB = 30;
-
-podcastsRouter.put(
-  '/api/podcasts/:id/pdf',
-  requirePerm('podcast', 'edit'),
-  express.raw({ type: 'application/pdf', limit: `${MAX_PDF_MB}mb` }),
-  async (req, res) => {
-    const tenantId = tid(req);
-    await requirePodcastHost(tenantId);
-    const podcast = await findPodcast(tenantId, String(req.params.id));
-    const data = req.body as Buffer;
-    if (!Buffer.isBuffer(data) || data.length === 0) throw new HttpError(400, `Bitte eine PDF-Datei (max. ${MAX_PDF_MB} MB) hochladen`);
-    if (data.subarray(0, 5).toString('latin1') !== '%PDF-') throw new HttpError(400, 'Die Datei ist kein PDF');
-    await writeFile(await pdfUploadPath(podcast.id), data);
-    const updated = await prisma.podcast.update({
-      where: { id: podcast.id },
-      data: { pdfFileName: `${await fileBaseOf(podcast)}.pdf`, pdfStatus: 'pending' },
-    });
-    await prisma.job.deleteMany({ where: { refId: podcast.id, type: PODCAST_PDF_JOB, status: { in: ['queued', 'failed'] } } });
-    await enqueueJob(tenantId, PODCAST_PDF_JOB, podcast.id);
-    res.json(updated);
-  },
-);
-
-podcastsRouter.delete('/api/podcasts/:id/pdf', requirePerm('podcast', 'edit'), async (req, res) => {
-  const tenantId = tid(req);
-  const podcast = await findPodcast(tenantId, String(req.params.id));
-  const warning = podcast.pdfStatus === 'uploaded' ? await deleteHostFile(tenantId, podcast.pdfFileName) : undefined;
-  await rm(await pdfUploadPath(podcast.id), { force: true });
-  await prisma.job.deleteMany({ where: { refId: podcast.id, type: PODCAST_PDF_JOB, status: { in: ['queued', 'failed'] } } });
-  const updated = await prisma.podcast.update({ where: { id: podcast.id }, data: { pdfFileName: null, pdfUrl: null, pdfStatus: null } });
-  await syncFeed(tenantId);
-  res.json({ ...updated, warning });
+  res.json({ ok: true, warning });
 });
 
 // ----- Import eines bestehenden RSS-Feeds -----

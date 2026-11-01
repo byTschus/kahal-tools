@@ -6,7 +6,7 @@ import { getSettings } from '../settings.js';
 
 /**
  * Öffentliches Podcast-Widget zum Einbetten per iframe: /embed/<gemeinde>/podcast
- * Zeigt die neueste Episode mit Player, Video- und PDF-Link; mit Pfeilen durch ältere Episoden blättern.
+ * Zeigt die neueste Episode mit Player und Video-Link; mit Pfeilen durch ältere Episoden blättern.
  * Optionen: ?theme=light|dark|auto, ?accent=1f6f5c (Hex ohne #), ?nr=0 (0 = neueste)
  */
 export const embedRouter = Router();
@@ -34,7 +34,6 @@ const ICONS = {
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>',
   video: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 10.5 21 7.5v9l-5.5-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
-  pdf: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   prev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -119,7 +118,6 @@ embedRouter.get('/embed/:slug/podcast', async (req, res) => {
     const meta = [episode.scripture, episode.speaker].filter(Boolean).map(esc).join(' · ');
     const duration = durationOf(episode);
     const video = videoUrlOf(episode);
-    const pdf = episode.pdfStatus === 'uploaded' ? episode.pdfUrl : null;
     body = `<article class="card">
   <div class="head">
     <div class="date" aria-hidden="true"><div class="d">${esc(d.day)}</div><div class="m">${esc(d.month)}</div><div class="y">${esc(d.year)}</div></div>
@@ -136,7 +134,6 @@ embedRouter.get('/embed/:slug/podcast', async (req, res) => {
   </div>
   <div class="foot">
     ${video ? `<a class="btn" href="${esc(video)}" target="_blank" rel="noopener">${ICONS.video}Video</a>` : ''}
-    ${pdf ? `<a class="btn" href="${esc(pdf)}" target="_blank" rel="noopener">${ICONS.pdf}PDF</a>` : ''}
     <a class="btn" href="${esc(episode.audioUrl)}" target="_blank" rel="noopener" download>${ICONS.download}MP3</a>
     <nav class="nav" aria-label="Weitere Predigten">
       ${nr + 1 < total ? `<a href="${link(nr + 1)}" aria-label="Ältere Predigt">${ICONS.prev}</a>` : `<span>${ICONS.prev}</span>`}

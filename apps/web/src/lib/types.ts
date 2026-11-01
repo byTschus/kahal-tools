@@ -53,9 +53,6 @@ export interface Podcast {
   startSec: number | null;
   endSec: number | null;
   fileName: string | null;
-  pdfFileName: string | null;
-  pdfUrl: string | null;
-  pdfStatus: 'pending' | 'uploaded' | 'failed' | null;
   imported: boolean;
   audioUrl: string | null;
   fileSize: number | null;

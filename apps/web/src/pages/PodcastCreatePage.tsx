@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, FileText, Mic, Play, SkipForward } from 'lucide-react';
+import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, Mic, Play, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
@@ -93,7 +93,6 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
   const [current, setCurrent] = useState(0);
   const [range, setRange] = useState<[number, number]>([0, 0]);
   const [form, setForm] = useState({ title: '', speaker: '', scripture: '', description: '', imageUrl: '' });
-  const [pdf, setPdf] = useState<File | null>(null);
   const [pickEvent, setPickEvent] = useState(false);
   const prep = useAction();
   const save = useAction();
@@ -129,18 +128,16 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
   const planOk = Boolean(prepared?.event && !prepared.eventLinkedTo);
 
   const submit = async () => {
-    const res = await save.run(async () => {
-      const podcast = await api.post<{ id: string }>('/api/podcasts', {
+    const res = await save.run(() =>
+      api.post<{ id: string }>('/api/podcasts', {
         videoId: video.id,
         eventId: prepared?.eventId ?? null,
         eventTitle: prepared?.event?.title ?? null,
         ...form,
         startSec: range[0],
         endSec: range[1],
-      });
-      if (pdf) await api.upload(`/api/podcasts/${podcast.id}/pdf`, pdf, 'application/pdf');
-      return podcast;
-    });
+      }),
+    );
     if (res) navigate('/podcast');
   };
 
@@ -224,9 +221,6 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
                 <input type="text" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
               </div>
             </Field>
-            <Field label="PDF (optional)" hint="z.B. Predigtnotizen oder Gottesdienst-Flyer. Wird neben der MP3 auf dem Podcast-Server gespeichert.">
-              <PdfInput file={pdf} onChange={setPdf} />
-            </Field>
             <Alert>{save.error}</Alert>
             <Button variant="primary" size="large" busy={save.busy} onClick={submit} disabled={!form.title || range[1] - range[0] < 10 || !planOk}>
               Podcast erstellen
@@ -275,22 +269,3 @@ function TimeBox({ label, value, onChange }: { label: string; value: number; onC
   );
 }
 
-/** Dateiauswahl für ein PDF */
-export function PdfInput({ file, onChange }: { file: File | null; onChange: (file: File | null) => void }) {
-  return (
-    <div className="row" style={{ flexWrap: 'nowrap' }}>
-      <label className="btn small" style={{ cursor: 'pointer' }}>
-        <FileText size={15} /> {file ? 'Andere Datei' : 'PDF wählen'}
-        <input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => onChange(e.target.files?.[0] ?? null)} />
-      </label>
-      {file && (
-        <>
-          <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</small>
-          <Button size="small" variant="ghost" onClick={() => onChange(null)}>
-            Entfernen
-          </Button>
-        </>
-      )}
-    </div>
-  );
-}

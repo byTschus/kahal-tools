@@ -1,6 +1,4 @@
 import type { Podcast, Tenant } from '@prisma/client';
-import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { getStreamingProvider } from '../providers/streaming/index.js';
@@ -9,36 +7,19 @@ import { podcastHostFor, requirePodcastHost } from './integrations.js';
 import { enqueueJob, registerJobHandler } from './jobs.js';
 
 export const PODCAST_JOB = 'podcast.render';
-/** Lädt ein hochgeladenes PDF über den Worker auf das Podcast-Hosting */
-export const PODCAST_PDF_JOB = 'podcast.pdf';
 /** Lädt feed.xml über den Worker auf das Podcast-Hosting; startet den Worker-Server nicht */
 export const PODCAST_FEED_JOB = 'podcast.feed';
 
-/** Ablage hochgeladener PDFs, bis der Worker sie übertragen hat */
-export async function pdfUploadPath(podcastId: string) {
-  const dir = join(config.dataDir, 'uploads');
-  await mkdir(dir, { recursive: true });
-  return join(dir, `${podcastId.replace(/[^a-z0-9]/gi, '')}.pdf`);
-}
-
 /**
  * Dateiname ohne Endung: Sekunden seit 1970 (z.B. 1787908529), eindeutig pro Gemeinde.
- * MP3 und PDF einer Episode teilen sich denselben Namen.
  */
 export async function nextFileBase(tenantId: string) {
   let ts = Math.floor(Date.now() / 1000);
   for (;;) {
-    const taken = await prisma.podcast.count({ where: { tenantId, OR: [{ fileName: `${ts}.mp3` }, { pdfFileName: `${ts}.pdf` }] } });
+    const taken = await prisma.podcast.count({ where: { tenantId, fileName: `${ts}.mp3` } });
     if (!taken) return String(ts);
     ts++;
   }
-}
-
-/** Basisname einer Episode (für das PDF): vom MP3 übernommen oder neu erzeugt */
-export async function fileBaseOf(podcast: Podcast) {
-  if (podcast.fileName) return podcast.fileName.replace(/\.mp3$/i, '');
-  if (podcast.pdfFileName) return podcast.pdfFileName.replace(/\.pdf$/i, '');
-  return nextFileBase(podcast.tenantId);
 }
 
 /** Link zum Video der Episode (YouTube oder Link aus dem importierten Feed) */
@@ -104,36 +85,6 @@ registerJobHandler(PODCAST_JOB, {
       where: { id: job.refId! },
       data: final ? { status: 'failed', error } : { status: 'queued', error: `${error} – neuer Versuch folgt` },
     });
-  },
-});
-
-registerJobHandler(PODCAST_PDF_JOB, {
-  async buildPayload(job) {
-    const podcast = await prisma.podcast.findUniqueOrThrow({ where: { id: job.refId! } });
-    const host = await requirePodcastHost(job.tenantId);
-    if (!podcast.pdfFileName) throw new Error('Kein PDF hinterlegt');
-    return {
-      podcastId: podcast.id,
-      // Der Worker lädt die Datei mit seinem Token vom Server (siehe routes/worker.ts)
-      filePath: `/jobs/${job.id}/file`,
-      fileName: podcast.pdfFileName,
-      host: { type: host.integration.provider, config: host.config, secrets: host.secrets },
-    };
-  },
-
-  async onComplete(job) {
-    const host = await requirePodcastHost(job.tenantId);
-    const podcast = await prisma.podcast.findUniqueOrThrow({ where: { id: job.refId! } });
-    await prisma.podcast.update({
-      where: { id: podcast.id },
-      data: { pdfStatus: 'uploaded', pdfUrl: host.provider.publicUrl(host.config, podcast.pdfFileName!) },
-    });
-    await rm(await pdfUploadPath(podcast.id), { force: true });
-    await syncFeed(job.tenantId);
-  },
-
-  async onFailed(job, _error, final) {
-    if (final) await prisma.podcast.updateMany({ where: { id: job.refId! }, data: { pdfStatus: 'failed' } });
   },
 });
 

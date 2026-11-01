@@ -46,13 +46,6 @@ interface PodcastJob {
   };
 }
 
-interface PdfJob {
-  id: string;
-  type: string;
-  attempt: number;
-  payload: { podcastId: string; filePath: string; fileName: string; host: HostSpec };
-}
-
 interface FeedJob {
   id: string;
   type: string;
@@ -60,7 +53,7 @@ interface FeedJob {
   payload: { fileName: string; content: string; host: HostSpec };
 }
 
-const JOB_TYPES = ['podcast.render', 'podcast.pdf', 'podcast.feed'];
+const JOB_TYPES = ['podcast.render', 'podcast.feed'];
 
 let stopping = false;
 const activeJobs = new Set<string>();
@@ -206,27 +199,6 @@ async function processPodcast(job: PodcastJob) {
   }
 }
 
-/** PDF vom Server holen und auf das Podcast-Hosting laden */
-async function processPdf(job: PdfJob) {
-  const p = job.payload;
-  const dir = await mkdtemp(join(TMP_DIR, 'kahal-'));
-  try {
-    const res = await fetch(`${SERVER_URL}/api/worker${p.filePath}`, {
-      headers: { Authorization: `Bearer ${WORKER_TOKEN}`, 'X-Worker-Id': WORKER_ID },
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!res.ok) throw new Error(`PDF konnte nicht vom Server geladen werden (HTTP ${res.status})`);
-    const file = join(dir, 'document.pdf');
-    await writeFile(file, Buffer.from(await res.arrayBuffer()));
-    await upload(p.host, file, p.fileName, () => {});
-    const { size } = await stat(file);
-    await api(`/jobs/${job.id}/complete`, { result: { fileSize: size } });
-    log(`PDF ${p.fileName} hochgeladen (${(size / 1e6).toFixed(1)} MB)`);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
-
 /** feed.xml (vom Server erzeugt) auf das Podcast-Hosting laden */
 async function processFeed(job: FeedJob) {
   const dir = await mkdtemp(join(TMP_DIR, 'kahal-'));
@@ -241,12 +213,11 @@ async function processFeed(job: FeedJob) {
   }
 }
 
-async function handle(job: PodcastJob | PdfJob | FeedJob) {
+async function handle(job: PodcastJob | FeedJob) {
   activeJobs.add(job.id);
   log(`Auftrag ${job.id} (${job.type}, Versuch ${job.attempt}) gestartet`);
   try {
     if (job.type === 'podcast.render') await processPodcast(job as PodcastJob);
-    else if (job.type === 'podcast.pdf') await processPdf(job as PdfJob);
     else if (job.type === 'podcast.feed') await processFeed(job as FeedJob);
     else throw new Error(`Unbekannter Auftragstyp ${job.type}`);
   } catch (err) {
@@ -262,7 +233,7 @@ async function handle(job: PodcastJob | PdfJob | FeedJob) {
 async function slot(n: number) {
   while (!stopping) {
     try {
-      const job = (await api('/claim', { types: JOB_TYPES })) as PodcastJob | PdfJob | FeedJob | null;
+      const job = (await api('/claim', { types: JOB_TYPES })) as PodcastJob | FeedJob | null;
       if (job?.id) {
         await handle(job);
         continue;
