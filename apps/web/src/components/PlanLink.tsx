@@ -15,12 +15,15 @@ export interface PlanRef {
 export function PlanLink({
   tool,
   ownId,
+  ownPlanId,
   value,
   onChange,
   required,
 }: {
   tool: PlanTool;
   ownId?: string | null;
+  /** Plan, mit dem der Eintrag bereits verknüpft ist (falls `ownId` nicht bekannt ist) */
+  ownPlanId?: string | null;
   value: PlanRef | null;
   onChange: (plan: PlanRef | null) => void;
   required?: boolean;
@@ -49,6 +52,7 @@ export function PlanLink({
           <EventPicker
             tool={tool}
             ownId={ownId}
+            ownPlanId={ownPlanId}
             defaultRange="past"
             value={value?.id ?? null}
             onChange={(ev: PlanningEvent) => {

@@ -268,6 +268,7 @@ function LivestreamModal({
           {prep.busy && <Spinner label="Plan wird ausgewertet …" />}
           <EventPicker
             tool="livestream"
+            ownPlanId={broadcast?.planId}
             value={event?.id ?? broadcast?.planId ?? null}
             onChange={(ev) => {
               setEvent(ev);
@@ -333,6 +334,7 @@ function LinkPlanModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast; 
       <Alert>{save.error}</Alert>
       <PlanLink
         tool="livestream"
+        ownPlanId={broadcast.planId}
         value={broadcast.planId ? { id: broadcast.planId, title: broadcast.planTitle ?? null } : null}
         onChange={async (plan) => {
           const ok = await save.run(() => api.put(`/api/livestreams/${broadcast.id}/plan`, { eventId: plan?.id ?? null, eventTitle: plan?.title ?? null }));

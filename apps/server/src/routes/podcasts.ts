@@ -59,7 +59,9 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     getSettings(tenantId, 'podcast'),
   ]);
   if (!broadcast) throw notFound('Video');
-  const eventId = body.eventId ?? local?.planId ?? null;
+  // Plan des Streams nur vorschlagen, wenn er noch keinem Podcast gehört
+  const streamPlanTaken = !body.eventId && local?.planId ? await prisma.podcast.findFirst({ where: { tenantId, planId: local.planId }, select: { title: true } }) : null;
+  const eventId = body.eventId ?? (streamPlanTaken ? null : (local?.planId ?? null));
   const event = eventId ? await (await planningClientFor(req.user!)).getEvent(eventId) : null;
   const vars = {
     ...(event?.variables ?? { event: { title: broadcast.title, date: broadcast.actualStart ?? broadcast.scheduledStart } }),
@@ -72,6 +74,8 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     eventId,
     event: event ? { id: event.id, title: event.title, startsAt: event.startsAt } : null,
     eventLinkedTo: linked?.title ?? null,
+    /** Der Plan des Streams gehört schon zu diesem Podcast und wurde deshalb nicht übernommen */
+    streamPlanTakenBy: streamPlanTaken?.title ?? null,
     video: { ...broadcast, durationSec: stats[body.videoId]?.durationSec ?? null },
     title: render(settings.titleTemplate, vars, opts).trim() || broadcast.title,
     speaker: render(settings.speakerTemplate, vars, opts).trim(),

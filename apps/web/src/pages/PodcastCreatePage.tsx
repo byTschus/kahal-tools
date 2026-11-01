@@ -13,6 +13,7 @@ interface Prepared {
   event: { id: string; title: string; startsAt: string | null } | null;
   /** Titel des Podcasts, dem der Plan bereits zugeordnet ist */
   eventLinkedTo: string | null;
+  streamPlanTakenBy: string | null;
   video: Broadcast & { durationSec: number | null };
   title: string;
   speaker: string;
@@ -197,7 +198,14 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
                 {prepared.event ? 'Ändern' : 'Plan wählen'}
               </Button>
             </div>
-            {!prepared.event && <Alert kind="warning">Bitte den Plan wählen, zu dem dieser Podcast gehört.</Alert>}
+            {!prepared.event &&
+              (prepared.streamPlanTakenBy ? (
+                <Alert kind="warning">
+                  Der Plan dieses Livestreams ist bereits dem Podcast „{prepared.streamPlanTakenBy}“ zugeordnet. Bitte einen anderen, noch freien Plan wählen.
+                </Alert>
+              ) : (
+                <Alert kind="warning">Bitte den Plan wählen, zu dem dieser Podcast gehört.</Alert>
+              ))}
             {prepared.eventLinkedTo && (
               <Alert kind="warning">Dieser Plan ist bereits dem Podcast „{prepared.eventLinkedTo}“ zugeordnet. Bitte einen anderen Plan wählen.</Alert>
             )}

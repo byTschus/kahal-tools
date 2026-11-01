@@ -10,7 +10,8 @@ export type PlanTool = 'livestream' | 'podcast' | 'visitors';
 /**
  * Auswahl eines Events / Plans aus dem Planungstool.
  * Mit `tool` werden Pläne, die schon einem anderen Eintrag dieses Tools gehören, gesperrt
- * (ein Plan kann pro Tool nur einem Eintrag zugeordnet sein); `ownId` = der gerade bearbeitete Eintrag.
+ * (ein Plan kann pro Tool nur einem Eintrag zugeordnet sein). Frei bleiben nur der eigene Eintrag (`ownId`)
+ * bzw. der Plan, mit dem der bearbeitete Eintrag bereits verknüpft ist (`ownPlanId`).
  */
 export function EventPicker({
   value,
@@ -18,12 +19,14 @@ export function EventPicker({
   defaultRange = 'upcoming',
   tool,
   ownId,
+  ownPlanId,
 }: {
   value: string | null;
   onChange: (event: PlanningEvent) => void;
   defaultRange?: 'upcoming' | 'past';
   tool?: PlanTool;
   ownId?: string | null;
+  ownPlanId?: string | null;
 }) {
   const [range, setRange] = useState<'upcoming' | 'past'>(defaultRange);
   const [filter, setFilter] = useState('');
@@ -53,7 +56,7 @@ export function EventPicker({
         <div className="scroll-list">
           {list.length === 0 && <div className="empty">Keine Pläne gefunden</div>}
           {list.map((e) => {
-            const taken = e.linked && e.linked.id !== ownId && value !== e.id ? e.linked : null;
+            const taken = e.linked && e.linked.id !== ownId && e.id !== ownPlanId ? e.linked : null;
             return (
               <button
                 key={e.id}
