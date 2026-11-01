@@ -8,3 +8,6 @@ dist/
 apps/worker/tmp/
 apps/worker/cookies.txt
 coverage/
+
+# Hochgeladene Dateien (PDFs bis zum Upload durch den Worker)
+apps/server/data/

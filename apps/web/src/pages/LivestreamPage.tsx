@@ -1,7 +1,8 @@
-import { ArrowLeft, ExternalLink, Eye, Pencil, Plus, Radio, RefreshCw, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ExternalLink, Eye, Pencil, Plus, Radio, RefreshCw, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
+import { PlanLink } from '../components/PlanLink';
 import { Alert, Badge, Button, Card, ConfirmButton, Empty, Field, Modal, PageHeader, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
 import { useCan } from '../lib/auth';
@@ -23,6 +24,7 @@ export function LivestreamPage() {
   const [status, setStatus] = useState<Status>('upcoming');
   const { data, loading, error, reload } = useApi<{ items: Broadcast[] }>(`/api/livestreams?status=${status}`);
   const [editing, setEditing] = useState<Broadcast | 'new' | null>(null);
+  const [linking, setLinking] = useState<Broadcast | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const remove = async (b: Broadcast) => {
@@ -106,6 +108,9 @@ export function LivestreamPage() {
                         <a className="btn small icon-only" href={b.url} target="_blank" rel="noreferrer" title="Auf YouTube öffnen" aria-label="Auf YouTube öffnen">
                           <ExternalLink size={15} />
                         </a>
+                        {can('livestream', 'edit') && (
+                          <Button size="small" icon={CalendarDays} title="Plan verknüpfen" aria-label="Plan verknüpfen" onClick={() => setLinking(b)} />
+                        )}
                         {can('livestream', 'edit') && b.status !== 'completed' && (
                           <Button size="small" icon={Pencil} onClick={() => setEditing(b)}>
                             Bearbeiten
@@ -125,6 +130,17 @@ export function LivestreamPage() {
           </div>
         )}
       </Card>
+      {linking && (
+        <LinkPlanModal
+          broadcast={linking}
+          onClose={() => setLinking(null)}
+          onSaved={() => {
+            setLinking(null);
+            setMessage('Plan-Verknüpfung wurde gespeichert.');
+            void reload();
+          }}
+        />
+      )}
       {editing && (
         <LivestreamModal
           broadcast={editing === 'new' ? null : editing}
@@ -216,7 +232,8 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
           <Alert>{prep.error}</Alert>
           {prep.busy && <Spinner label="Plan wird ausgewertet …" />}
           <EventPicker
-            value={event?.id ?? null}
+            tool="livestream"
+            value={event?.id ?? broadcast?.planId ?? null}
             onChange={(ev) => {
               setEvent(ev);
               void prepare(ev);
@@ -261,6 +278,26 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
           </div>
         </>
       )}
+    </Modal>
+  );
+}
+
+function LinkPlanModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast; onClose: () => void; onSaved: () => void }) {
+  const save = useAction();
+  return (
+    <Modal title="Plan verknüpfen" onClose={onClose}>
+      <p className="muted">
+        Livestream „{broadcast.title}“. Jeder Plan kann nur einem Livestream zugeordnet werden. Der Stream auf YouTube bleibt unverändert.
+      </p>
+      <Alert>{save.error}</Alert>
+      <PlanLink
+        tool="livestream"
+        value={broadcast.planId ? { id: broadcast.planId, title: broadcast.planTitle ?? null } : null}
+        onChange={async (plan) => {
+          const ok = await save.run(() => api.put(`/api/livestreams/${broadcast.id}/plan`, { eventId: plan?.id ?? null, eventTitle: plan?.title ?? null }));
+          if (ok) onSaved();
+        }}
+      />
     </Modal>
   );
 }

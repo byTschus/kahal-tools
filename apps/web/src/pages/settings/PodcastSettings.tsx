@@ -11,7 +11,7 @@ interface PodcastSettingsData {
   speakerTemplate: string;
   descriptionTemplate: string;
   imageTemplate: string;
-  fileNameTemplate: string;
+  scriptureTemplate: string;
   bitrate: '64k' | '96k' | '128k' | '192k';
   mono: boolean;
   normalize: boolean;
@@ -59,7 +59,13 @@ export function PodcastSettings() {
                 sample={sample}
                 hint="z.B. {{series.artwork}} für das Serienbild aus Planning Center. Leer = Feed-Bild."
               />
-              <TemplateField label="Dateiname" value={s.form.fileNameTemplate} onChange={(v) => s.set('fileNameTemplate', v)} sample={sample} />
+              <TemplateField
+                label="Bibelstelle"
+                value={s.form.scriptureTemplate}
+                onChange={(v) => s.set('scriptureTemplate', v)}
+                sample={sample}
+                hint="Optional, wird im eingebetteten Player angezeigt. Die MP3-Datei heisst immer nach dem Erstellungszeitpunkt (Sekunden seit 1970, z.B. 1787908529.mp3)."
+              />
             </div>
           </Card>
           <Card title="Audio">

@@ -9,6 +9,7 @@ import { config } from './config.js';
 import { prisma } from './db.js';
 import { errorHandler, HttpError } from './lib/http.js';
 import { authRouter } from './routes/auth.js';
+import { embedRouter } from './routes/embed.js';
 import { feedsRouter } from './routes/feeds.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { livestreamsRouter } from './routes/livestreams.js';
@@ -64,6 +65,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.use(workerRouter);
 app.use(feedsRouter);
+app.use(embedRouter);
 app.use(loadUser);
 app.use(authRouter);
 app.use(meRouter);

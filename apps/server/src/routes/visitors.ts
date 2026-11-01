@@ -1,11 +1,13 @@
-import { Router, type Request } from 'express';
+import express, { Router, type Request } from 'express';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { requirePerm, tid } from '../auth/middleware.js';
 import { prisma } from '../db.js';
-import { notFound } from '../lib/http.js';
+import { HttpError, notFound } from '../lib/http.js';
 import { formatDate } from '../lib/template.js';
 import { streamingFor } from '../services/integrations.js';
+import { assertPlanFree } from '../services/planLinks.js';
+import { analyzeImport, commitImport, readTable } from '../services/visitorImport.js';
 import { getSettings } from '../settings.js';
 
 export const visitorsRouter = Router();
@@ -133,6 +135,8 @@ async function validLocationValues(tenantId: string, values: { locationId: strin
 visitorsRouter.post('/api/visitors/counts', requirePerm('visitors', 'create'), async (req, res) => {
   const body = countSchema.parse(req.body);
   const tenantId = tid(req);
+  if (!body.eventId) throw new HttpError(400, 'Bitte einen Plan auswählen');
+  await assertPlanFree('visitors', tenantId, body.eventId);
   const values = await validLocationValues(tenantId, body.values);
   const count = await prisma.visitorCount.create({
     data: {
@@ -158,6 +162,7 @@ visitorsRouter.patch('/api/visitors/counts/:id', requirePerm('visitors', 'edit')
   const tenantId = tid(req);
   const existing = await prisma.visitorCount.findFirst({ where: { id: String(req.params.id), tenantId } });
   if (!existing) throw notFound('Erfassung');
+  if (body.eventId) await assertPlanFree('visitors', tenantId, body.eventId, existing.id);
   if (body.values) {
     const values = await validLocationValues(tenantId, body.values);
     await prisma.visitorCountValue.deleteMany({ where: { countId: existing.id } });
@@ -185,6 +190,34 @@ visitorsRouter.delete('/api/visitors/counts/:id', requirePerm('visitors', 'delet
   if (!count) throw notFound('Erfassung');
   res.json({ ok: true });
 });
+
+// ----- Import (CSV / Excel) -----
+
+/** Datei als Rohdaten; ?fileName=...&createLocations=true&commit=true (ohne commit = Vorschau) */
+visitorsRouter.put(
+  '/api/visitors/import',
+  requirePerm('visitors', 'create'),
+  express.raw({ type: () => true, limit: '10mb' }),
+  async (req, res) => {
+    const tenantId = tid(req);
+    const fileName = String(req.query.fileName ?? 'import.csv');
+    const createLocations = req.query.createLocations === 'true';
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw new HttpError(400, 'Keine Datei erhalten');
+    const table = await readTable(fileName, req.body);
+    const result = await analyzeImport(tenantId, req.user!.tenant.timeZone, table, createLocations);
+    if (req.query.commit !== 'true') {
+      res.json({
+        columns: result.columns,
+        total: result.rows.length,
+        duplicates: result.rows.filter((r) => r.duplicate).length,
+        errors: result.errors.slice(0, 50),
+        sample: result.rows.slice(0, 8),
+      });
+      return;
+    }
+    res.json(await commitImport(tenantId, req.user!.id, result));
+  },
+);
 
 // ----- Statistik & Export -----
 

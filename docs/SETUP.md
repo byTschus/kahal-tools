@@ -323,6 +323,16 @@ Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker starte
 5. **Einstellungen → Besucherzähler:** Orte anlegen (Saal EG, Saal OG, …), Livestream-Zählung einstellen.
 6. **Einstellungen → Benutzer:** Personen aus PCO **einladen** und Rechte vergeben, oder **Gruppen** (z.B. „Technik“) anlegen. Personen, die sich selbst anmelden, erscheinen als Zugangsanfrage.
 
+7. **Bestehende Daten übernehmen (optional):**
+   * **Podcast → Feed importieren:** Adresse des bisherigen RSS-Feeds eingeben. Die Episoden erscheinen in der Liste und im neuen Feed; die Audiodateien bleiben beim bisherigen Anbieter.
+   * **Besucherzähler → Importieren:** CSV- oder Excel-Datei mit den Spalten `Datum`, optional `Uhrzeit`, `Titel`, `Livestream`, `Bemerkung` und je einer Spalte pro Ort. Die Vorschau zeigt, wie jede Spalte verstanden wird.
+   * Importierte Einträge brauchen keinen Plan. Beim Bearbeiten lässt sich einer verknüpfen.
+8. **Podcast → Einbetten:** iframe-Code für die Webseite kopieren. Er zeigt die neueste Predigt mit Player, Video- und PDF-Link.
+
+> **Ein Plan, ein Eintrag:** Jeder neue Livestream, Podcast und jede Besucher-Erfassung gehört zu genau einem Plan, und jeder Plan kann pro Tool nur einmal verwendet werden. Bereits verwendete Pläne sind in der Auswahl ausgegraut.
+
+> **Dateinamen:** MP3 und PDF heissen nach dem Erstellungszeitpunkt in Sekunden seit 1970, z.B. `1787908529.mp3` und `1787908529.pdf`.
+
 > **Gleichzeitige Zuschauer:** YouTube liefert diese Zahl nur **während** des Streams. kahal.tools fragt sie bei Streams, die über das Tool erstellt wurden, alle 2 Minuten ab und speichert den Spitzenwert.
 
 ---
@@ -352,12 +362,16 @@ npm ci --include=dev && npm run build
 
 Dann die Site im Manager neu starten. Datenbank-Migrationen laufen beim Start automatisch.
 
+Hochgeladene PDFs liegen kurz in `apps/server/data/uploads`, bis der Worker sie auf das Podcast-Hosting überträgt. Ein anderer Ort lässt sich mit `DATA_DIR` in der `.env` festlegen.
+
 **Worker (Public Cloud):**
 
 ```bash
 cd ~/kahal-tools && git pull
 cd apps/worker && docker compose up -d --build
 ```
+
+Server und Worker immer zusammen aktualisieren: Neue Auftragsarten (z.B. PDF-Upload) bearbeitet nur ein aktueller Worker; bis dahin bleiben sie in der Warteschlange.
 
 ---
 

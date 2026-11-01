@@ -1,8 +1,11 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { createReadStream, existsSync } from 'node:fs';
 import { config } from '../config.js';
+import { prisma } from '../db.js';
 import { HttpError } from '../lib/http.js';
+import { pdfUploadPath, PODCAST_PDF_JOB } from '../services/podcasts.js';
 import { claimJob, completeJob, failJobByWorker, queueStats, reportProgress } from '../services/jobs.js';
 
 /** API für die Worker (Podcast-Verarbeitung auf dem Public-Cloud-Server). Authentifizierung per WORKER_TOKEN. */
@@ -49,4 +52,16 @@ workerRouter.post('/api/worker/jobs/:id/fail', async (req, res) => {
   const body = z.object({ error: z.string(), retryable: z.boolean().default(true) }).parse(req.body);
   const ok = await failJobByWorker(String(req.params.id), workerId(req), body.error.slice(0, 5000), body.retryable);
   res.status(ok ? 200 : 409).json({ ok });
+});
+
+/** Hochgeladene Datei eines Auftrags (z.B. PDF), nur für den Worker, der den Auftrag gerade bearbeitet */
+workerRouter.get('/api/worker/jobs/:id/file', async (req, res) => {
+  const job = await prisma.job.findUnique({ where: { id: String(req.params.id) } });
+  if (!job || job.status !== 'processing' || job.lockedBy !== workerId(req) || job.type !== PODCAST_PDF_JOB || !job.refId) {
+    throw new HttpError(404, 'Datei nicht gefunden');
+  }
+  const path = await pdfUploadPath(job.refId);
+  if (!existsSync(path)) throw new HttpError(404, 'Datei nicht mehr vorhanden – bitte das PDF erneut hochladen');
+  res.setHeader('Content-Type', 'application/pdf');
+  createReadStream(path).pipe(res);
 });

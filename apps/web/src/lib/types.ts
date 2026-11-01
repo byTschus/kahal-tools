@@ -17,6 +17,8 @@ export interface PlanningEvent {
   sourceName?: string;
   startsAt: string | null;
   url?: string;
+  /** Mit ?tool=…: Eintrag, dem der Plan bereits zugeordnet ist */
+  linked?: { id: string; title: string } | null;
 }
 
 export interface Broadcast {
@@ -39,15 +41,22 @@ export interface Broadcast {
 
 export interface Podcast {
   id: string;
-  sourceVideoId: string;
+  sourceVideoId: string | null;
   planId: string | null;
+  planTitle: string | null;
   title: string;
   speaker: string | null;
+  scripture: string | null;
   description: string | null;
   imageUrl: string | null;
-  startSec: number;
-  endSec: number;
+  linkUrl: string | null;
+  startSec: number | null;
+  endSec: number | null;
   fileName: string | null;
+  pdfFileName: string | null;
+  pdfUrl: string | null;
+  pdfStatus: 'pending' | 'uploaded' | 'failed' | null;
+  imported: boolean;
   audioUrl: string | null;
   fileSize: number | null;
   durationSec: number | null;
@@ -75,6 +84,7 @@ export interface VisitorCount {
   livestreamVideoId: string | null;
   livestreamCount: number | null;
   notes: string | null;
+  imported: boolean;
   values: { locationId: string; value: number }[];
 }
 

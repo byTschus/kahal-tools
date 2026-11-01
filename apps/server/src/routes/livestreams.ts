@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { HttpError } from '../lib/http.js';
 import { render } from '../lib/template.js';
 import { requireStreaming } from '../services/integrations.js';
+import { assertPlanFree } from '../services/planLinks.js';
 import { planningClientFor, resolveStartTime } from '../services/planning.js';
 import { getSettings } from '../settings.js';
 
@@ -60,6 +61,8 @@ const streamSchema = z.object({
 livestreamsRouter.post('/api/livestreams', requirePerm('livestream', 'create'), async (req, res) => {
   const body = streamSchema.parse(req.body);
   const tenantId = tid(req);
+  if (!body.eventId) throw new HttpError(400, 'Bitte einen Plan auswählen');
+  await assertPlanFree('livestream', tenantId, body.eventId);
   if (new Date(body.scheduledStart).getTime() < Date.now() - 5 * 60_000) throw new HttpError(400, 'Der Startzeitpunkt liegt in der Vergangenheit');
   const settings = await getSettings(tenantId, 'livestream');
   const { client, provider } = await requireStreaming(tenantId);
@@ -93,6 +96,10 @@ livestreamsRouter.patch('/api/livestreams/:id', requirePerm('livestream', 'edit'
   const body = streamSchema.partial().parse(req.body);
   const tenantId = tid(req);
   const { client, provider } = await requireStreaming(tenantId);
+  if (body.eventId) {
+    const own = await prisma.livestream.findFirst({ where: { tenantId, provider: provider.key, externalId: String(req.params.id) }, select: { id: true } });
+    await assertPlanFree('livestream', tenantId, body.eventId, own?.id);
+  }
   const broadcast = await client.updateBroadcast(String(req.params.id), {
     title: body.title,
     description: body.description,
@@ -111,6 +118,37 @@ livestreamsRouter.patch('/api/livestreams/:id', requirePerm('livestream', 'edit'
     update: data,
   });
   res.json(broadcast);
+});
+
+const linkSchema = z.object({ eventId: z.string().nullable(), eventTitle: z.string().nullable().optional() });
+
+/** Plan verknüpfen oder lösen, ohne den Stream auf YouTube zu ändern (auch für vergangene Streams) */
+livestreamsRouter.put('/api/livestreams/:id/plan', requirePerm('livestream', 'edit'), async (req, res) => {
+  const body = linkSchema.parse(req.body);
+  const tenantId = tid(req);
+  const { client, provider } = await requireStreaming(tenantId);
+  const externalId = String(req.params.id);
+  const own = await prisma.livestream.findFirst({ where: { tenantId, provider: provider.key, externalId } });
+  await assertPlanFree('livestream', tenantId, body.eventId, own?.id);
+  const link = { planId: body.eventId, planTitle: body.eventId ? (body.eventTitle ?? null) : null };
+  if (own) {
+    await prisma.livestream.update({ where: { id: own.id }, data: link });
+  } else {
+    const broadcast = await client.getBroadcast(externalId);
+    if (!broadcast) throw new HttpError(404, 'Livestream nicht gefunden');
+    await prisma.livestream.create({
+      data: {
+        tenantId,
+        provider: provider.key,
+        externalId,
+        title: broadcast.title,
+        scheduledStart: broadcast.scheduledStart ? new Date(broadcast.scheduledStart) : null,
+        status: broadcast.status,
+        ...link,
+      },
+    });
+  }
+  res.json({ ok: true });
 });
 
 livestreamsRouter.delete('/api/livestreams/:id', requirePerm('livestream', 'delete'), async (req, res) => {

@@ -1,11 +1,13 @@
-import { Check, Copy, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
+import { Check, Code, Copy, Download, FileText, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, Badge, Button, Card, ConfirmButton, Empty, Field, Modal, PageHeader, Progress, Spinner } from '../components/ui';
+import { PlanLink, type PlanRef } from '../components/PlanLink';
+import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, PageHeader, Progress, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
-import { useCan } from '../lib/auth';
+import { useCan, useMe } from '../lib/auth';
 import { fmtBytes, fmtDate, fmtDuration, fromLocalInput, toLocalInput } from '../lib/format';
 import type { Integrations, Podcast } from '../lib/types';
+import { PdfInput } from './PodcastCreatePage';
 
 const STATUS: Record<Podcast['status'], { label: string; color?: 'green' | 'red' | 'blue' | 'yellow' }> = {
   queued: { label: 'In Warteschlange', color: 'yellow' },
@@ -14,16 +16,19 @@ const STATUS: Record<Podcast['status'], { label: string; color?: 'green' | 'red'
   failed: { label: 'Fehlgeschlagen', color: 'red' },
 };
 
+const durationOf = (p: Podcast) => p.durationSec ?? (p.endSec != null && p.startSec != null ? p.endSec - p.startSec : null);
+
 export function PodcastPage() {
   const can = useCan();
   const { data, loading, error, reload } = useApi<Podcast[]>('/api/podcasts');
   const { data: integrations } = useApi<Integrations>('/api/integrations');
   const [editing, setEditing] = useState<Podcast | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [embedding, setEmbedding] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'warning'; text: string } | null>(null);
-  const [copied, setCopied] = useState(false);
 
-  // Solange Podcasts verarbeitet werden, regelmässig aktualisieren
-  const pending = data?.some((p) => p.status === 'queued' || p.status === 'processing');
+  // Solange Podcasts oder PDFs verarbeitet werden, regelmässig aktualisieren
+  const pending = data?.some((p) => p.status === 'queued' || p.status === 'processing' || p.pdfStatus === 'pending');
   useEffect(() => {
     if (!pending) return;
     const t = setInterval(() => void reload(), 5000);
@@ -44,6 +49,14 @@ export function PodcastPage() {
   return (
     <>
       <PageHeader title="Podcast" description="Predigten aus vergangenen Streams schneiden und veröffentlichen.">
+        <Button icon={Code} onClick={() => setEmbedding(true)}>
+          Einbetten
+        </Button>
+        {can('podcast', 'create') && (
+          <Button icon={Download} onClick={() => setImporting(true)}>
+            Feed importieren
+          </Button>
+        )}
         {can('podcast', 'create') && (
           <Link to="/podcast/new" className="btn primary">
             <Plus size={16} /> Neuer Podcast
@@ -68,17 +81,7 @@ export function PodcastPage() {
                 <div className="cell-sub" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{integrations.feedUrl}</div>
               </div>
             </div>
-            <Button
-              size="small"
-              icon={copied ? Check : Copy}
-              onClick={async () => {
-                await navigator.clipboard.writeText(integrations.feedUrl);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-            >
-              {copied ? 'Kopiert' : 'Kopieren'}
-            </Button>
+            <CopyButton text={integrations.feedUrl} />
           </div>
         </Card>
       )}
@@ -88,7 +91,7 @@ export function PodcastPage() {
         ) : loading && !data ? (
           <Spinner />
         ) : !data?.length ? (
-          <Empty icon={Mic} title="Noch keine Podcasts">Erstelle den ersten Podcast aus einem vergangenen Livestream.</Empty>
+          <Empty icon={Mic} title="Noch keine Podcasts">Erstelle den ersten Podcast aus einem vergangenen Livestream oder importiere einen bestehenden Feed.</Empty>
         ) : (
           <div className="table-wrap">
             <table>
@@ -108,18 +111,21 @@ export function PodcastPage() {
                     <td>
                       <div className="cell-title">{p.title}</div>
                       <div className="cell-sub">
-                        {p.speaker ? `${p.speaker} · ` : ''}
-                        {fmtDate(p.publishedAt ?? p.createdAt)}
-                        {p.fileSize ? ` · ${fmtBytes(p.fileSize)}` : ''}
+                        {[p.speaker, p.scripture, fmtDate(p.publishedAt ?? p.createdAt), p.fileSize ? fmtBytes(p.fileSize) : null].filter(Boolean).join(' · ')}
                       </div>
+                      <div className="cell-sub">{p.planTitle ? `Plan: ${p.planTitle}` : p.imported ? 'Importiert, kein Plan verknüpft' : 'Kein Plan verknüpft'}</div>
                       {p.status === 'published' && p.audioUrl && <audio controls preload="none" src={p.audioUrl} style={{ display: 'block', marginTop: 6, height: 32, maxWidth: 320 }} />}
                       {p.error && <div style={{ color: 'var(--danger)', fontSize: '0.82rem', whiteSpace: 'pre-wrap' }}>{p.error}</div>}
                     </td>
                     <td>
-                      <Badge color={STATUS[p.status].color}>{STATUS[p.status].label}</Badge>
-                      {p.status === 'processing' && <Progress value={p.progress} />}
+                      <div className="stack" style={{ gap: 4, alignItems: 'flex-start' }}>
+                        <Badge color={STATUS[p.status].color}>{STATUS[p.status].label}</Badge>
+                        {p.status === 'processing' && <Progress value={p.progress} />}
+                        {p.imported && <Badge plain>Importiert</Badge>}
+                        <PdfBadge podcast={p} />
+                      </div>
                     </td>
-                    <td className="num">{fmtDuration(p.durationSec ?? p.endSec - p.startSec)}</td>
+                    <td className="num">{fmtDuration(durationOf(p))}</td>
                     <td>
                       <div className="actions">
                         {p.status === 'failed' && can('podcast', 'create') && (
@@ -133,7 +139,13 @@ export function PodcastPage() {
                           </Button>
                         )}
                         {can('podcast', 'delete') && p.status !== 'processing' && (
-                          <ConfirmButton icon={Trash2} title="Löschen" aria-label="Löschen" question={`Podcast „${p.title}“ inkl. Audiodatei löschen?`} onConfirm={() => remove(p)}>
+                          <ConfirmButton
+                            icon={Trash2}
+                            title="Löschen"
+                            aria-label="Löschen"
+                            question={p.imported ? `Importierte Episode „${p.title}“ entfernen? Die Audiodatei beim bisherigen Anbieter bleibt bestehen.` : `Podcast „${p.title}“ inkl. Audiodatei löschen?`}
+                            onConfirm={() => remove(p)}
+                          >
                             {null}
                           </ConfirmButton>
                         )}
@@ -150,59 +162,142 @@ export function PodcastPage() {
         <PodcastEditModal
           podcast={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={(warning) => {
             setEditing(null);
-            setMessage({ kind: 'success', text: 'Podcast wurde gespeichert.' });
+            setMessage(warning ? { kind: 'warning', text: warning } : { kind: 'success', text: 'Podcast wurde gespeichert.' });
             void reload();
           }}
         />
       )}
+      {importing && (
+        <FeedImportModal
+          onClose={() => setImporting(false)}
+          onDone={(text) => {
+            setImporting(false);
+            setMessage({ kind: 'success', text });
+            void reload();
+          }}
+        />
+      )}
+      {embedding && <EmbedModal onClose={() => setEmbedding(false)} />}
     </>
   );
 }
 
-function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onClose: () => void; onSaved: () => void }) {
+function PdfBadge({ podcast: p }: { podcast: Podcast }) {
+  if (p.pdfStatus === 'uploaded' && p.pdfUrl)
+    return (
+      <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="meta">
+        <FileText size={14} /> PDF
+      </a>
+    );
+  if (p.pdfStatus === 'pending') return <Badge color="yellow">PDF wird hochgeladen</Badge>;
+  if (p.pdfStatus === 'failed') return <Badge color="red">PDF-Upload fehlgeschlagen</Badge>;
+  return null;
+}
+
+function CopyButton({ text, label = 'Kopieren' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      size="small"
+      icon={copied ? Check : Copy}
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+    >
+      {copied ? 'Kopiert' : label}
+    </Button>
+  );
+}
+
+function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onClose: () => void; onSaved: (warning?: string) => void }) {
   const [form, setForm] = useState({
     title: podcast.title,
     speaker: podcast.speaker ?? '',
+    scripture: podcast.scripture ?? '',
     description: podcast.description ?? '',
     imageUrl: podcast.imageUrl ?? '',
     publishedAt: toLocalInput(podcast.publishedAt),
   });
+  const [plan, setPlan] = useState<PlanRef | null>(podcast.planId ? { id: podcast.planId, title: podcast.planTitle } : null);
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [removePdf, setRemovePdf] = useState(false);
   const save = useAction();
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
+  const hasPdf = Boolean(podcast.pdfStatus);
+
+  const submit = async () => {
+    let warning: string | undefined;
+    const ok = await save.run(async () => {
+      await api.patch(`/api/podcasts/${podcast.id}`, {
+        ...form,
+        publishedAt: form.publishedAt ? fromLocalInput(form.publishedAt) : undefined,
+        ...((plan?.id ?? null) !== podcast.planId ? { eventId: plan?.id ?? null, eventTitle: plan?.title ?? null } : {}),
+      });
+      if (pdf) await api.upload(`/api/podcasts/${podcast.id}/pdf`, pdf, 'application/pdf');
+      else if (removePdf) warning = (await api.del<{ warning?: string }>(`/api/podcasts/${podcast.id}/pdf`)).warning;
+      return true;
+    });
+    if (ok) onSaved(warning);
+  };
 
   return (
     <Modal
       title="Podcast bearbeiten"
       onClose={onClose}
       footer={
-        <Button
-          variant="primary"
-          busy={save.busy}
-          onClick={async () => {
-            const ok = await save.run(() =>
-              api.patch(`/api/podcasts/${podcast.id}`, { ...form, publishedAt: form.publishedAt ? fromLocalInput(form.publishedAt) : undefined }),
-            );
-            if (ok) onSaved();
-          }}
-        >
+        <Button variant="primary" busy={save.busy} onClick={submit}>
           Speichern
         </Button>
       }
     >
       <Alert>{save.error}</Alert>
+      <Field label="Plan">
+        <PlanLink tool="podcast" ownId={podcast.id} value={plan} onChange={setPlan} />
+      </Field>
       <Field label="Titel">
         <input type="text" value={form.title} onChange={set('title')} />
       </Field>
-      <Field label="Sprecher">
-        <input type="text" value={form.speaker} onChange={set('speaker')} />
-      </Field>
+      <div className="grid grid-2">
+        <Field label="Sprecher">
+          <input type="text" value={form.speaker} onChange={set('speaker')} />
+        </Field>
+        <Field label="Bibelstelle">
+          <input type="text" value={form.scripture} onChange={set('scripture')} />
+        </Field>
+      </div>
       <Field label="Beschreibung">
         <textarea className="prose" rows={6} value={form.description} onChange={set('description')} />
       </Field>
       <Field label="Bild-URL">
         <input type="text" value={form.imageUrl} onChange={set('imageUrl')} />
+      </Field>
+      <Field label="PDF" hint="Wird neben der MP3 auf dem Podcast-Server gespeichert">
+        {hasPdf && !pdf && !removePdf ? (
+          <div className="row">
+            <PdfBadge podcast={podcast} />
+            <small>{podcast.pdfFileName}</small>
+            <Button size="small" variant="ghost" onClick={() => setRemovePdf(true)}>
+              Entfernen
+            </Button>
+            <PdfInput file={null} onChange={setPdf} />
+          </div>
+        ) : (
+          <div className="row">
+            <PdfInput file={pdf} onChange={setPdf} />
+            {removePdf && (
+              <>
+                <small>PDF wird beim Speichern entfernt.</small>
+                <Button size="small" variant="ghost" onClick={() => setRemovePdf(false)}>
+                  Rückgängig
+                </Button>
+              </>
+            )}
+          </div>
+        )}
       </Field>
       {podcast.status === 'published' && (
         <Field label="Veröffentlicht am" hint="Bestimmt die Reihenfolge im Feed">
@@ -210,6 +305,120 @@ function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onC
         </Field>
       )}
       <small>Hinweis: Änderungen wirken sich auf den Feed aus. Die ID3-Tags in der bereits hochgeladenen MP3-Datei bleiben unverändert.</small>
+    </Modal>
+  );
+}
+
+interface FeedPreview {
+  channel: { title: string; description: string; author: string; imageUrl: string };
+  total: number;
+  new: number;
+  episodes: { title: string; publishedAt: string | null; durationSec: number | null; isNew: boolean }[];
+}
+
+function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
+  const [url, setUrl] = useState('');
+  const [adoptChannel, setAdoptChannel] = useState(true);
+  const [preview, setPreview] = useState<FeedPreview | null>(null);
+  const load = useAction();
+  const run = useAction();
+
+  const loadPreview = async () => {
+    setPreview(null);
+    const res = await load.run(() => api.post<FeedPreview>('/api/podcasts/import-feed', { url }));
+    if (res) setPreview(res);
+  };
+
+  const commit = async () => {
+    const res = await run.run(() => api.post<{ imported: number; skipped: number }>('/api/podcasts/import-feed', { url, commit: true, adoptChannel }));
+    if (res) onDone(`${res.imported} Episoden importiert${res.skipped ? `, ${res.skipped} bereits vorhanden` : ''}.`);
+  };
+
+  return (
+    <Modal
+      title="Bestehenden Podcast-Feed importieren"
+      wide
+      onClose={onClose}
+      footer={
+        preview ? (
+          <Button variant="primary" busy={run.busy} disabled={!preview.new} onClick={commit}>
+            {preview.new} Episoden importieren
+          </Button>
+        ) : null
+      }
+    >
+      <p className="muted">
+        Übernimmt die Episoden eines bestehenden RSS-Feeds. Die Audiodateien bleiben beim bisherigen Anbieter und werden verlinkt. Einen Plan kannst du später beim
+        Bearbeiten einer Episode verknüpfen.
+      </p>
+      <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <input type="url" placeholder="https://… /feed.xml" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && url && loadPreview()} />
+        <Button busy={load.busy} disabled={!url.trim()} onClick={loadPreview}>
+          Feed laden
+        </Button>
+      </div>
+      <Alert>{load.error ?? run.error}</Alert>
+      {preview && (
+        <div className="stack">
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            {preview.channel.imageUrl && <img src={preview.channel.imageUrl} alt="" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}
+            <div>
+              <div className="cell-title">{preview.channel.title || 'Ohne Titel'}</div>
+              <div className="cell-sub">
+                {preview.total} Episoden, davon {preview.new} neu
+              </div>
+            </div>
+          </div>
+          <div className="scroll-list" style={{ maxHeight: 260 }}>
+            {preview.episodes.map((e, i) => (
+              <div key={i} className="list-item" style={{ cursor: 'default', opacity: e.isNew ? 1 : 0.55 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="cell-title">{e.title}</div>
+                  <div className="cell-sub">
+                    {fmtDate(e.publishedAt, false)} {e.durationSec ? `· ${fmtDuration(e.durationSec)}` : ''}
+                  </div>
+                </div>
+                {!e.isNew && <Badge plain>bereits vorhanden</Badge>}
+              </div>
+            ))}
+          </div>
+          <Checkbox checked={adoptChannel} onChange={setAdoptChannel} label="Leere Feed-Angaben (Titel, Beschreibung, Autor, Bild …) aus diesem Feed übernehmen" />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function EmbedModal({ onClose }: { onClose: () => void }) {
+  const { me } = useMe();
+  const [theme, setTheme] = useState<'auto' | 'light' | 'dark'>('auto');
+  const base = `${window.location.origin}/embed/${me.tenant.slug}/podcast`;
+  const src = theme === 'auto' ? base : `${base}?theme=${theme}`;
+  const code = `<iframe src="${src}" title="Predigten" width="100%" height="250" style="max-width:560px;border:0" loading="lazy"></iframe>`;
+  return (
+    <Modal title="Podcast einbetten" wide onClose={onClose}>
+      <p className="muted">
+        Zeigt die neueste Predigt mit Player, Video- und PDF-Link auf eurer Webseite. Mit den Pfeilen lässt sich durch ältere Predigten blättern. Den Code einfach in
+        die Webseite einfügen.
+      </p>
+      <Tabs
+        tabs={[
+          { key: 'auto', label: 'Automatisch' },
+          { key: 'light', label: 'Hell' },
+          { key: 'dark', label: 'Dunkel' },
+        ]}
+        value={theme}
+        onChange={setTheme}
+      />
+      <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+        <code style={{ flex: 1, minWidth: 0, wordBreak: 'break-all', fontSize: '0.8rem', padding: 10, background: 'var(--surface-2)', borderRadius: 8 }}>{code}</code>
+        <CopyButton text={code} />
+      </div>
+      <div className="label" style={{ marginTop: 8 }}>
+        Vorschau
+      </div>
+      <iframe key={src} src={src} title="Vorschau" width="100%" height="250" style={{ maxWidth: 560, border: 0 }} />
+      <small>Farbe anpassen: an die Adresse „?accent=1f6f5c“ anhängen (Hex-Farbcode ohne #).</small>
     </Modal>
   );
 }

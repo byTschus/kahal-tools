@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireUser, tid } from '../auth/middleware.js';
 import { HttpError } from '../lib/http.js';
 import { filterNames, listVariables, render } from '../lib/template.js';
+import { linkedEntries, type PlanTool } from '../services/planLinks.js';
 import { planningClientFor } from '../services/planning.js';
 import { getSettings } from '../settings.js';
 import type { Request } from 'express';
@@ -29,7 +30,15 @@ planningRouter.get('/api/planning/sources', async (req, res) => {
 planningRouter.get('/api/planning/events', async (req, res) => {
   const client = await planningClientFor(req.user!);
   const { sourceIds } = await getSettings(tid(req), 'planning');
-  res.json(await client.listEvents({ ...eventRange(req), sourceIds, limit: 100 }));
+  const events = await client.listEvents({ ...eventRange(req), sourceIds, limit: 100 });
+  // ?tool=podcast: markiert Pläne, die bereits einem Eintrag dieses Tools zugeordnet sind
+  const tool = z.enum(['livestream', 'podcast', 'visitors']).optional().catch(undefined).parse(req.query.tool) as PlanTool | undefined;
+  if (!tool) {
+    res.json(events);
+    return;
+  }
+  const linked = await linkedEntries(tool, tid(req), events.map((e) => e.id));
+  res.json(events.map((e) => ({ ...e, linked: linked.get(e.id) ?? null })));
 });
 
 planningRouter.get('/api/planning/events/:id', async (req, res) => {

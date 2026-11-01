@@ -26,7 +26,8 @@ export const settingsSchemas = {
     speakerTemplate: z.string().default('{{people.Pastor | default:"Gemeinde"}}'),
     descriptionTemplate: z.string().default('Predigt vom {{event.date | date:"dd.MM.yyyy"}}\n{{items.Predigt.description | strip_html}}'),
     imageTemplate: z.string().default('{{series.artwork}}'),
-    fileNameTemplate: z.string().default('{{event.date | date:"yyyy-MM-dd"}}_{{event.title}}'),
+    /** Bibelstelle, z.B. aus der Beschreibung des Predigt-Elements */
+    scriptureTemplate: z.string().default(''),
     /** Audio-Einstellungen für den Worker */
     bitrate: z.enum(['64k', '96k', '128k', '192k']).default('96k'),
     mono: z.boolean().default(true),

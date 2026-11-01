@@ -18,6 +18,16 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(err.status).json({ error: err.message, code: err.code });
     return;
   }
+  if ((err as { type?: string })?.type === 'entity.too.large') {
+    res.status(413).json({ error: 'Die Datei ist zu gross' });
+    return;
+  }
+  // Eindeutigkeit verletzt (z.B. Plan bereits einem anderen Eintrag zugeordnet)
+  if ((err as { code?: string })?.code === 'P2002') {
+    const target = String((err as { meta?: { target?: unknown } }).meta?.target ?? '');
+    res.status(409).json({ error: /planId/.test(target) ? 'Dieser Plan ist bereits einem anderen Eintrag zugeordnet' : 'Dieser Eintrag existiert bereits' });
+    return;
+  }
   if (err instanceof ZodError) {
     res.status(400).json({ error: 'Ungültige Eingabe', details: err.issues });
     return;

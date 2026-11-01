@@ -13,6 +13,7 @@ export default defineConfig({
       '/api': { target },
       '/auth': { target },
       '/feeds': { target },
+      '/embed': { target },
     },
   },
   build: {

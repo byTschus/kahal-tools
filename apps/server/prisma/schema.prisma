@@ -153,25 +153,41 @@ model Livestream {
   updatedAt      DateTime  @updatedAt
 
   @@unique([tenantId, provider, externalId])
+  /// Ein Plan kann nur einem Livestream zugeordnet sein
+  @@unique([tenantId, planId])
   @@index([scheduledStart])
-  @@index([tenantId, planId])
 }
 
 model Podcast {
   id             String    @id @default(cuid())
   tenantId       String
   tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sourceProvider String
-  sourceVideoId  String
+  /// Leer bei importierten Episoden
+  sourceProvider String?
+  sourceVideoId  String?
   planId         String?
+  planTitle      String?
   title          String    @db.VarChar(255)
   speaker        String?
+  /// Bibelstelle
+  scripture      String?
   description    String?   @db.Text
   imageUrl       String?   @db.Text
-  startSec       Int
-  endSec         Int
+  /// Link zum Video (importierte Episoden; sonst aus sourceVideoId)
+  linkUrl        String?   @db.Text
+  startSec       Int?
+  endSec         Int?
   fileName       String?
   audioUrl       String?   @db.Text
+  /// Optionales PDF (z.B. Predigtnotizen), liegt neben der MP3 auf dem Podcast-Hosting
+  pdfFileName    String?
+  pdfUrl         String?   @db.Text
+  /// pending | uploaded | failed
+  pdfStatus      String?
+  /// Aus einem bestehenden RSS-Feed importiert
+  imported       Boolean   @default(false)
+  /// GUID aus dem importierten Feed (verhindert doppelte Importe)
+  externalGuid   String?   @db.VarChar(500)
   fileSize       Int?
   durationSec    Int?
   /// queued | processing | published | failed
@@ -183,7 +199,11 @@ model Podcast {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  /// Ein Plan kann nur einem Podcast zugeordnet sein
+  @@unique([tenantId, planId])
+  @@unique([tenantId, externalGuid])
   @@index([tenantId, createdAt])
+  @@index([tenantId, publishedAt])
 }
 
 /// Warteschlange für Hintergrundaufträge (z.B. Podcast schneiden). Wird von Workern abgeholt.
@@ -236,12 +256,16 @@ model VisitorCount {
   livestreamVideoId String?
   livestreamCount   Int?
   notes             String?  @db.Text
+  /// Aus einer CSV-/Excel-Datei importiert
+  imported          Boolean  @default(false)
   createdById       String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   values VisitorCountValue[]
 
+  /// Ein Plan kann nur einer Erfassung zugeordnet sein
+  @@unique([tenantId, planId])
   @@index([tenantId, eventDate])
 }
 

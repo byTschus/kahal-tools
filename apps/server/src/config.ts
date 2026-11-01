@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 function env(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
   if (value === undefined || value === '') {
@@ -15,6 +17,8 @@ export const config = {
   sessionSecret: env('SESSION_SECRET'),
   encryptionKey: env('ENCRYPTION_KEY'),
   workerToken: process.env.WORKER_TOKEN ?? '',
+  /** Ablage für hochgeladene Dateien, bis der Worker sie auf das Podcast-Hosting übertragen hat */
+  dataDir: process.env.DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)),
   runScheduler: process.env.RUN_SCHEDULER !== 'false',
   migrateOnStart: process.env.MIGRATE_ON_START !== 'false',
   enableMockPlanning: process.env.ENABLE_MOCK_PLANNING === 'true' && !isProduction,

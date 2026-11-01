@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, Mic, Play, SkipForward } from 'lucide-react';
+import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, FileText, Mic, Play, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
@@ -11,12 +11,14 @@ import type { Broadcast, PlanningEvent } from '../lib/types';
 interface Prepared {
   eventId: string | null;
   event: { id: string; title: string; startsAt: string | null } | null;
+  /** Titel des Podcasts, dem der Plan bereits zugeordnet ist */
+  eventLinkedTo: string | null;
   video: Broadcast & { durationSec: number | null };
   title: string;
   speaker: string;
+  scripture: string;
   description: string;
   imageUrl: string;
-  fileName: string;
 }
 
 export function PodcastCreatePage() {
@@ -90,7 +92,8 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
   const [range, setRange] = useState<[number, number]>([0, 0]);
-  const [form, setForm] = useState({ title: '', speaker: '', description: '', imageUrl: '', fileName: '' });
+  const [form, setForm] = useState({ title: '', speaker: '', scripture: '', description: '', imageUrl: '' });
+  const [pdf, setPdf] = useState<File | null>(null);
   const [pickEvent, setPickEvent] = useState(false);
   const prep = useAction();
   const save = useAction();
@@ -99,7 +102,7 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
     const res = await prep.run(() => api.post<Prepared>('/api/podcasts/prepare', { videoId: video.id, eventId }));
     if (!res) return;
     setPrepared(res);
-    setForm({ title: res.title, speaker: res.speaker, description: res.description, imageUrl: res.imageUrl, fileName: res.fileName });
+    setForm({ title: res.title, speaker: res.speaker, scripture: res.scripture, description: res.description, imageUrl: res.imageUrl });
     if (res.video.durationSec) {
       setDuration((d) => d || res.video.durationSec!);
       setRange((r) => (r[1] ? r : [0, res.video.durationSec!]));
@@ -122,10 +125,22 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
   const max = Math.max(1, Math.floor(duration));
   const pct = (sec: number) => `${(sec / max) * 100}%`;
 
+  // Der Plan muss gewählt und noch keinem anderen Podcast zugeordnet sein
+  const planOk = Boolean(prepared?.event && !prepared.eventLinkedTo);
+
   const submit = async () => {
-    const res = await save.run(() =>
-      api.post('/api/podcasts', { videoId: video.id, eventId: prepared?.eventId ?? null, ...form, startSec: range[0], endSec: range[1] }),
-    );
+    const res = await save.run(async () => {
+      const podcast = await api.post<{ id: string }>('/api/podcasts', {
+        videoId: video.id,
+        eventId: prepared?.eventId ?? null,
+        eventTitle: prepared?.event?.title ?? null,
+        ...form,
+        startSec: range[0],
+        endSec: range[1],
+      });
+      if (pdf) await api.upload(`/api/podcasts/${podcast.id}/pdf`, pdf, 'application/pdf');
+      return podcast;
+    });
     if (res) navigate('/podcast');
   };
 
@@ -178,19 +193,28 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
                     {prepared.event.title} <small>({fmtDate(prepared.event.startsAt, false)})</small>
                   </span>
                 ) : (
-                  <small>Kein Plan verknüpft</small>
+                  <small>Noch kein Plan gewählt</small>
                 )}
               </div>
               <Button size="small" onClick={() => setPickEvent(true)}>
                 {prepared.event ? 'Ändern' : 'Plan wählen'}
               </Button>
             </div>
+            {!prepared.event && <Alert kind="warning">Bitte den Plan wählen, zu dem dieser Podcast gehört.</Alert>}
+            {prepared.eventLinkedTo && (
+              <Alert kind="warning">Dieser Plan ist bereits dem Podcast „{prepared.eventLinkedTo}“ zugeordnet. Bitte einen anderen Plan wählen.</Alert>
+            )}
             <Field label="Titel">
               <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </Field>
-            <Field label="Sprecher">
-              <input type="text" value={form.speaker} onChange={(e) => setForm({ ...form, speaker: e.target.value })} />
-            </Field>
+            <div className="grid grid-2">
+              <Field label="Sprecher">
+                <input type="text" value={form.speaker} onChange={(e) => setForm({ ...form, speaker: e.target.value })} />
+              </Field>
+              <Field label="Bibelstelle">
+                <input type="text" value={form.scripture} placeholder="z.B. Johannes 3,16" onChange={(e) => setForm({ ...form, scripture: e.target.value })} />
+              </Field>
+            </div>
             <Field label="Beschreibung">
               <textarea className="prose" rows={6} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </Field>
@@ -200,11 +224,11 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
                 <input type="text" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
               </div>
             </Field>
-            <Field label="Dateiname" hint=".mp3 und eine eindeutige Endung werden automatisch ergänzt">
-              <input type="text" value={form.fileName} onChange={(e) => setForm({ ...form, fileName: e.target.value })} />
+            <Field label="PDF (optional)" hint="z.B. Predigtnotizen oder Gottesdienst-Flyer. Wird neben der MP3 auf dem Podcast-Server gespeichert.">
+              <PdfInput file={pdf} onChange={setPdf} />
             </Field>
             <Alert>{save.error}</Alert>
-            <Button variant="primary" size="large" busy={save.busy} onClick={submit} disabled={!form.title || range[1] - range[0] < 10}>
+            <Button variant="primary" size="large" busy={save.busy} onClick={submit} disabled={!form.title || range[1] - range[0] < 10 || !planOk}>
               Podcast erstellen
             </Button>
             <small>Das Audio wird im Hintergrund geladen, geschnitten und hochgeladen. Den Fortschritt siehst du in der Podcast-Übersicht.</small>
@@ -215,6 +239,7 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
       {pickEvent && (
         <Modal title="Plan auswählen" wide onClose={() => setPickEvent(false)}>
           <EventPicker
+            tool="podcast"
             defaultRange="past"
             value={prepared?.eventId ?? null}
             onChange={(ev: PlanningEvent) => {
@@ -246,6 +271,26 @@ function TimeBox({ label, value, onChange }: { label: string; value: number; onC
         }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
+    </div>
+  );
+}
+
+/** Dateiauswahl für ein PDF */
+export function PdfInput({ file, onChange }: { file: File | null; onChange: (file: File | null) => void }) {
+  return (
+    <div className="row" style={{ flexWrap: 'nowrap' }}>
+      <label className="btn small" style={{ cursor: 'pointer' }}>
+        <FileText size={15} /> {file ? 'Andere Datei' : 'PDF wählen'}
+        <input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => onChange(e.target.files?.[0] ?? null)} />
+      </label>
+      {file && (
+        <>
+          <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</small>
+          <Button size="small" variant="ghost" onClick={() => onChange(null)}>
+            Entfernen
+          </Button>
+        </>
+      )}
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import { Download, Pencil, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
+import { Download, FileUp, Pencil, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart } from '../components/BarChart';
 import { EventPicker } from '../components/EventPicker';
-import { Alert, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, PageHeader, Spinner, Tabs } from '../components/ui';
+import { PlanLink } from '../components/PlanLink';
+import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, PageHeader, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
 import { useCan } from '../lib/auth';
 import { fmtDate, fmtNumber, fromLocalInput, isoDate, toLocalInput } from '../lib/format';
@@ -37,6 +38,8 @@ export function VisitorsPage() {
   const { data: locations } = useApi<VisitorLocation[]>('/api/visitors/locations');
   const { data: counts, loading, error, reload } = useApi<VisitorCount[]>(`/api/visitors/counts?${query}`);
   const [editing, setEditing] = useState<VisitorCount | 'new' | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const usedLocationIds = new Set(counts?.flatMap((c) => c.values.map((v) => v.locationId)));
   const columns = (locations ?? []).filter((l) => l.active || usedLocationIds.has(l.id));
@@ -48,11 +51,17 @@ export function VisitorsPage() {
           <Download size={16} /> Excel
         </a>
         {can('visitors', 'create') && (
+          <Button icon={FileUp} onClick={() => setImporting(true)}>
+            Importieren
+          </Button>
+        )}
+        {can('visitors', 'create') && (
           <Button variant="primary" icon={Plus} onClick={() => setEditing('new')}>
             Besucher erfassen
           </Button>
         )}
       </PageHeader>
+      <Alert kind="success">{message}</Alert>
       {locations && locations.length === 0 && (
         <Alert kind="warning">
           Es sind noch keine Orte definiert. <Link to="/settings/visitors">In den Einstellungen Orte anlegen</Link>
@@ -108,6 +117,7 @@ export function VisitorsPage() {
                         <td>
                           <div className="cell-title">{c.eventTitle}</div>
                           {c.notes && <div className="cell-sub">{c.notes}</div>}
+                          {c.imported && !c.planId && <Badge plain>Importiert</Badge>}
                         </td>
                         {columns.map((l) => (
                           <td key={l.id} className="num">
@@ -152,6 +162,16 @@ export function VisitorsPage() {
           <StatsView query={query} />
         )}
       </Card>
+      {importing && (
+        <ImportModal
+          onClose={() => setImporting(false)}
+          onDone={(text) => {
+            setImporting(false);
+            setMessage(text);
+            void reload();
+          }}
+        />
+      )}
       {editing && locations && (
         <CountModal
           count={editing === 'new' ? null : editing}
@@ -266,6 +286,7 @@ function CountModal({ count, locations, onClose, onSaved }: { count: VisitorCoun
   const { data: settings } = useApi<{ livestreamEnabled: boolean; livestreamMode: 'concurrent' | 'views' }>('/api/settings/visitors');
   const [step, setStep] = useState<'event' | 'form'>(count ? 'form' : 'event');
   const [eventId, setEventId] = useState<string | null>(count?.planId ?? null);
+  const [planTitle, setPlanTitle] = useState<string | null>(null);
   const [title, setTitle] = useState(count?.eventTitle ?? '');
   const [date, setDate] = useState(toLocalInput(count?.eventDate ?? null));
   const [values, setValues] = useState<Record<string, string>>(Object.fromEntries((count?.values ?? []).map((v) => [v.locationId, String(v.value)])));
@@ -329,21 +350,35 @@ function CountModal({ count, locations, onClose, onSaved }: { count: VisitorCoun
       footer={
         step === 'form' ? (
           <>
-            <Button onClick={() => setStep('event')}>Event wählen</Button>
-            <Button variant="primary" busy={save.busy} onClick={submit} disabled={!title || !date}>
+            {!count && <Button onClick={() => setStep('event')}>Anderer Plan</Button>}
+            <Button variant="primary" busy={save.busy} onClick={submit} disabled={!title || !date || (!count && !eventId)}>
               Speichern
             </Button>
           </>
-        ) : (
-          <Button onClick={() => setStep('form')}>Ohne Plan manuell erfassen</Button>
-        )
+        ) : null
       }
     >
       {step === 'event' ? (
-        <EventPicker defaultRange="past" value={eventId} onChange={chooseEvent} />
+        <>
+          <p className="muted">Wähle den Plan, zu dem die Besucherzahlen gehören. Jeder Plan kann nur einmal erfasst werden.</p>
+          <EventPicker tool="visitors" ownId={count?.id} defaultRange="past" value={eventId} onChange={chooseEvent} />
+        </>
       ) : (
         <>
           <Alert>{save.error}</Alert>
+          {count && (
+            <Field label="Plan" hint="Titel und Datum der Erfassung bleiben beim Verknüpfen unverändert">
+              <PlanLink
+                tool="visitors"
+                ownId={count.id}
+                value={eventId ? { id: eventId, title: eventId === count.planId ? count.eventTitle : planTitle } : null}
+                onChange={(plan) => {
+                  setEventId(plan?.id ?? null);
+                  setPlanTitle(plan?.title ?? null);
+                }}
+              />
+            </Field>
+          )}
           <div className="grid grid-2">
             <Field label="Event">
               <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -416,5 +451,138 @@ function BroadcastSelect({ value, onChange }: { value: string | null; onChange: 
         </button>
       ))}
     </div>
+  );
+}
+
+interface ImportPreview {
+  columns: { header: string; kind: 'date' | 'time' | 'title' | 'livestream' | 'notes' | 'total' | 'location' | 'newLocation' | 'ignored' }[];
+  total: number;
+  duplicates: number;
+  errors: { line: number; message: string }[];
+  sample: { line: number; date: string; title: string; values: Record<string, number>; livestream: number | null; duplicate: boolean }[];
+}
+
+const KIND_LABEL: Record<ImportPreview['columns'][number]['kind'], string> = {
+  date: 'Datum',
+  time: 'Uhrzeit',
+  title: 'Titel',
+  livestream: 'Livestream',
+  notes: 'Bemerkung',
+  total: 'Total (wird berechnet)',
+  location: 'Ort',
+  newLocation: 'Neuer Ort',
+  ignored: 'Wird ignoriert',
+};
+
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [createLocations, setCreateLocations] = useState(true);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const load = useAction();
+  const run = useAction();
+  const url = (commit: boolean) =>
+    `/api/visitors/import?fileName=${encodeURIComponent(file?.name ?? '')}&createLocations=${createLocations}${commit ? '&commit=true' : ''}`;
+
+  useEffect(() => {
+    if (!file) return;
+    setPreview(null);
+    void load.run(() => api.upload<ImportPreview>(url(false), file)).then((res) => res && setPreview(res));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, createLocations]);
+
+  const commit = async () => {
+    if (!file) return;
+    const res = await run.run(() => api.upload<{ imported: number; skipped: number }>(url(true), file));
+    if (res) onDone(`${res.imported} Erfassungen importiert${res.skipped ? `, ${res.skipped} bereits vorhanden und übersprungen` : ''}.`);
+  };
+
+  const importable = preview ? preview.total - preview.duplicates : 0;
+
+  return (
+    <Modal
+      title="Besucherzahlen importieren"
+      wide
+      onClose={onClose}
+      footer={
+        preview ? (
+          <Button variant="primary" busy={run.busy} disabled={!importable} onClick={commit}>
+            {importable} Erfassungen importieren
+          </Button>
+        ) : null
+      }
+    >
+      <p className="muted">
+        CSV- oder Excel-Datei (.xlsx) mit einer Zeile pro Gottesdienst. Erste Zeile = Überschriften: <b>Datum</b> (Pflicht), optional <b>Uhrzeit</b>, <b>Titel</b>,{' '}
+        <b>Livestream</b> und <b>Bemerkung</b>. Alle weiteren Spalten sind Orte, z.B. „Saal EG“. Ohne Uhrzeit wird 10:00 angenommen. Einen Plan kannst du später beim
+        Bearbeiten verknüpfen.
+      </p>
+      <code style={{ display: 'block', fontSize: '0.8rem', padding: 10, background: 'var(--surface-2)', borderRadius: 8, whiteSpace: 'pre', overflowX: 'auto' }}>
+        {'Datum;Titel;Saal EG;Kinderprogramm;Livestream\n05.01.2025;Gottesdienst;142;31;58'}
+      </code>
+      <div className="row">
+        <label className="btn" style={{ cursor: 'pointer' }}>
+          <FileUp size={16} /> {file ? 'Andere Datei' : 'Datei wählen'}
+          <input type="file" accept=".csv,.txt,.xlsx" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+        {file && <small>{file.name}</small>}
+      </div>
+      <Checkbox checked={createLocations} onChange={setCreateLocations} label="Unbekannte Spalten als neue Orte anlegen" />
+      <Alert>{load.error ?? run.error}</Alert>
+      {load.busy && <Spinner label="Datei wird geprüft …" />}
+      {preview && (
+        <div className="stack">
+          <div className="row" style={{ gap: 6 }}>
+            {preview.columns
+              .filter((c) => c.header)
+              .map((c) => (
+                <Badge key={c.header} color={c.kind === 'ignored' ? undefined : c.kind === 'newLocation' ? 'blue' : 'green'} plain>
+                  {c.header}: {KIND_LABEL[c.kind]}
+                </Badge>
+              ))}
+          </div>
+          <div>
+            {preview.total} Zeilen erkannt{preview.duplicates ? `, davon ${preview.duplicates} bereits vorhanden` : ''}.
+          </div>
+          {preview.errors.length > 0 && (
+            <Alert kind="warning">
+              {preview.errors.slice(0, 5).map((e) => (
+                <div key={e.line}>
+                  Zeile {e.line}: {e.message}
+                </div>
+              ))}
+              {preview.errors.length > 5 && <div>… und {preview.errors.length - 5} weitere</div>}
+            </Alert>
+          )}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Titel</th>
+                  <th>Werte</th>
+                  <th className="num">Livestream</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.sample.map((r) => (
+                  <tr key={r.line} style={r.duplicate ? { opacity: 0.5 } : undefined}>
+                    <td>{fmtDate(r.date)}</td>
+                    <td>{r.title}</td>
+                    <td>
+                      <small>
+                        {Object.entries(r.values)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join(', ')}
+                      </small>
+                    </td>
+                    <td className="num">{fmtNumber(r.livestream)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
