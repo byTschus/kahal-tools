@@ -8,6 +8,7 @@ import { existingGuids, fetchFeed } from '../services/feedImport.js';
 import { podcastHostFor, requirePodcastHost, requireStreaming } from '../services/integrations.js';
 import { enqueueJob } from '../services/jobs.js';
 import { assertPlanFree } from '../services/planLinks.js';
+import { matchPlans } from '../services/planMatch.js';
 import { planningClientFor } from '../services/planning.js';
 import { nextFileBase, PODCAST_JOB, syncFeed } from '../services/podcasts.js';
 import { getSettings, saveSettings } from '../settings.js';
@@ -201,6 +202,8 @@ const importSchema = z.object({
   commit: z.boolean().default(false),
   /** Leere Feed-Angaben in den Einstellungen mit den Angaben des importierten Feeds füllen */
   adoptChannel: z.boolean().default(false),
+  /** Neue Episoden automatisch einem Plan zuordnen (Datum, Titel) */
+  matchPlans: z.boolean().default(false),
 });
 
 podcastsRouter.post('/api/podcasts/import-feed', requirePerm('podcast', 'create'), async (req, res) => {
@@ -210,13 +213,28 @@ podcastsRouter.post('/api/podcasts/import-feed', requirePerm('podcast', 'create'
   const existing = await existingGuids(tenantId, feed.episodes.map((e) => e.guid));
   const isNew = (e: (typeof feed.episodes)[number]) => !existing.guids.has(e.guid) && !existing.audioUrls.has(e.audioUrl);
   const fresh = feed.episodes.filter(isNew);
+  const match = body.matchPlans
+    ? await matchPlans(
+        req.user!,
+        'podcast',
+        fresh.filter((e) => e.publishedAt).map((e) => ({ key: e.guid, date: new Date(e.publishedAt!), hasTime: false, title: e.title })),
+      )
+    : null;
 
   if (!body.commit) {
     res.json({
       channel: feed.channel,
       total: feed.episodes.length,
       new: fresh.length,
-      episodes: feed.episodes.slice(0, 200).map((e) => ({ title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec, isNew: isNew(e) })),
+      matching: match ? { error: match.error, linked: match.matches.size, ambiguous: match.ambiguous.size } : undefined,
+      episodes: feed.episodes.slice(0, 200).map((e) => ({
+        title: e.title,
+        publishedAt: e.publishedAt,
+        durationSec: e.durationSec,
+        isNew: isNew(e),
+        plan: match?.matches.get(e.guid) ?? null,
+        ambiguous: match?.ambiguous.has(e.guid) ?? false,
+      })),
     });
     return;
   }
@@ -237,6 +255,8 @@ podcastsRouter.post('/api/podcasts/import-feed', requirePerm('podcast', 'create'
       publishedAt: e.publishedAt ? new Date(e.publishedAt) : new Date(),
       imported: true,
       externalGuid: e.guid,
+      planId: match?.matches.get(e.guid)?.planId ?? null,
+      planTitle: match?.matches.get(e.guid)?.title ?? null,
       createdById: req.user!.id,
     })),
     skipDuplicates: true,
@@ -260,5 +280,5 @@ podcastsRouter.post('/api/podcasts/import-feed', requirePerm('podcast', 'create'
     });
   }
   await syncFeed(tenantId);
-  res.json({ imported: fresh.length, skipped: feed.episodes.length - fresh.length });
+  res.json({ imported: fresh.length, skipped: feed.episodes.length - fresh.length, linked: match?.matches.size ?? 0, matchError: match?.error });
 });

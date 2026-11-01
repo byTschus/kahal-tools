@@ -358,7 +358,7 @@ Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker starte
 7. **Bestehende Daten übernehmen (optional):**
    * **Podcast → Feed importieren:** Adresse des bisherigen RSS-Feeds eingeben. Die Episoden erscheinen in der Liste und im neuen Feed; die Audiodateien bleiben beim bisherigen Anbieter.
    * **Besucherzähler → Importieren:** CSV- oder Excel-Datei mit den Spalten `Datum`, optional `Uhrzeit`, `Titel`, `Livestream`, `Bemerkung` und je einer Spalte pro Ort. Die Vorschau zeigt, wie jede Spalte verstanden wird.
-   * Importierte Einträge brauchen keinen Plan. Beim Bearbeiten lässt sich einer verknüpfen.
+   * Importierte Einträge brauchen keinen Plan. Mit **„Neue Einträge automatisch einem Plan zuordnen“** (standardmässig an) werden sie beim Import verknüpft: Besucherzahlen mit dem Plan vom selben Tag (bei mehreren Plänen entscheidet die Uhrzeit bzw. der Titel), Podcast-Episoden mit dem Plan vom Veröffentlichungstag oder bis zu zwei Tage davor (mit ähnlichem Titel bis zu einer Woche). Fehlen Uhrzeit oder Titel in der Besucher-Datei, werden sie aus dem Plan übernommen. Nicht eindeutige Fälle und bereits vergebene Pläne bleiben frei; die Vorschau zeigt die Zuordnung vor dem Import. Beim Bearbeiten lässt sich ein Plan jederzeit nachträglich verknüpfen.
 8. **Podcast → Einbetten:** iframe-Code für die Webseite kopieren. Er zeigt die neueste Predigt mit Player und – falls vorhanden – einem Link zum passenden YouTube-Stream.
 
 > **Ein Plan, ein Eintrag:** Jeder neue Livestream, Podcast und jede Besucher-Erfassung gehört zu genau einem Plan, und jeder Plan kann pro Tool nur einmal verwendet werden. Bereits verwendete Pläne sind in der Auswahl ausgegraut.

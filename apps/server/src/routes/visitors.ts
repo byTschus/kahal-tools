@@ -7,6 +7,7 @@ import { HttpError, notFound } from '../lib/http.js';
 import { formatDate } from '../lib/template.js';
 import { streamingFor } from '../services/integrations.js';
 import { assertPlanFree } from '../services/planLinks.js';
+import { matchPlans } from '../services/planMatch.js';
 import { analyzeImport, commitImport, readTable } from '../services/visitorImport.js';
 import { getSettings } from '../settings.js';
 
@@ -205,17 +206,42 @@ visitorsRouter.put(
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw new HttpError(400, 'Keine Datei erhalten');
     const table = await readTable(fileName, req.body);
     const result = await analyzeImport(tenantId, req.user!.tenant.timeZone, table, createLocations);
+    // ?matchPlans=true: neue Einträge automatisch einem Plan zuordnen (Datum, Uhrzeit, Titel)
+    let matchError: string | undefined;
+    if (req.query.matchPlans === 'true') {
+      const fresh = result.rows.filter((r) => !r.duplicate);
+      const match = await matchPlans(
+        req.user!,
+        'visitors',
+        fresh.map((r) => ({ key: String(r.line), date: new Date(r.date), hasTime: !r.timeGuessed, title: r.titleGuessed ? '' : r.title })),
+      );
+      matchError = match.error;
+      for (const r of fresh) {
+        r.plan = match.matches.get(String(r.line)) ?? null;
+        r.ambiguous = match.ambiguous.has(String(r.line));
+      }
+    }
     if (req.query.commit !== 'true') {
+      const fresh = result.rows.filter((r) => !r.duplicate);
       res.json({
         columns: result.columns,
         total: result.rows.length,
-        duplicates: result.rows.filter((r) => r.duplicate).length,
+        duplicates: result.rows.length - fresh.length,
         errors: result.errors.slice(0, 50),
         sample: result.rows.slice(0, 8),
+        matching:
+          req.query.matchPlans === 'true'
+            ? {
+                error: matchError,
+                linked: fresh.filter((r) => r.plan).length,
+                ambiguous: fresh.filter((r) => r.ambiguous).length,
+                rows: fresh.slice(0, 300).map((r) => ({ line: r.line, date: r.date, title: r.title, plan: r.plan ?? null, ambiguous: r.ambiguous ?? false })),
+              }
+            : undefined,
       });
       return;
     }
-    res.json(await commitImport(tenantId, req.user!.id, result));
+    res.json({ ...(await commitImport(tenantId, req.user!.id, result)), matchError });
   },
 );
 

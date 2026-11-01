@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { BarChart } from '../components/BarChart';
 import { EventPicker } from '../components/EventPicker';
 import { PlanLink } from '../components/PlanLink';
+import { MATCH_LABEL, MatchingInfo, PlanMatchBadge, type MatchedPlan, type MatchingSummary } from '../components/PlanMatch';
 import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, PageHeader, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
 import { useCan } from '../lib/auth';
@@ -460,6 +461,7 @@ interface ImportPreview {
   duplicates: number;
   errors: { line: number; message: string }[];
   sample: { line: number; date: string; title: string; values: Record<string, number>; livestream: number | null; duplicate: boolean }[];
+  matching?: MatchingSummary & { rows: { line: number; date: string; title: string; plan: MatchedPlan | null; ambiguous: boolean }[] };
 }
 
 const KIND_LABEL: Record<ImportPreview['columns'][number]['kind'], string> = {
@@ -477,23 +479,27 @@ const KIND_LABEL: Record<ImportPreview['columns'][number]['kind'], string> = {
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [createLocations, setCreateLocations] = useState(true);
+  const [matchPlans, setMatchPlans] = useState(true);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const load = useAction();
   const run = useAction();
   const url = (commit: boolean) =>
-    `/api/visitors/import?fileName=${encodeURIComponent(file?.name ?? '')}&createLocations=${createLocations}${commit ? '&commit=true' : ''}`;
+    `/api/visitors/import?fileName=${encodeURIComponent(file?.name ?? '')}&createLocations=${createLocations}&matchPlans=${matchPlans}${commit ? '&commit=true' : ''}`;
 
   useEffect(() => {
     if (!file) return;
     setPreview(null);
     void load.run(() => api.upload<ImportPreview>(url(false), file)).then((res) => res && setPreview(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, createLocations]);
+  }, [file, createLocations, matchPlans]);
 
   const commit = async () => {
     if (!file) return;
-    const res = await run.run(() => api.upload<{ imported: number; skipped: number }>(url(true), file));
-    if (res) onDone(`${res.imported} Erfassungen importiert${res.skipped ? `, ${res.skipped} bereits vorhanden und übersprungen` : ''}.`);
+    const res = await run.run(() => api.upload<{ imported: number; skipped: number; linked: number; matchError?: string }>(url(true), file));
+    if (res)
+      onDone(
+        `${res.imported} Erfassungen importiert${res.linked ? `, ${res.linked} davon einem Plan zugeordnet` : ''}${res.skipped ? `, ${res.skipped} bereits vorhanden und übersprungen` : ''}.${res.matchError ? ` ${res.matchError}` : ''}`,
+      );
   };
 
   const importable = preview ? preview.total - preview.duplicates : 0;
@@ -513,8 +519,8 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (messag
     >
       <p className="muted">
         CSV- oder Excel-Datei (.xlsx) mit einer Zeile pro Gottesdienst. Erste Zeile = Überschriften: <b>Datum</b> (Pflicht), optional <b>Uhrzeit</b>, <b>Titel</b>,{' '}
-        <b>Livestream</b> und <b>Bemerkung</b>. Alle weiteren Spalten sind Orte, z.B. „Saal EG“. Ohne Uhrzeit wird 10:00 angenommen. Einen Plan kannst du später beim
-        Bearbeiten verknüpfen.
+        <b>Livestream</b> und <b>Bemerkung</b>. Alle weiteren Spalten sind Orte, z.B. „Saal EG“. Ohne Uhrzeit wird 10:00 angenommen. Neue Einträge können automatisch
+        dem Plan vom selben Tag zugeordnet werden; fehlen Uhrzeit oder Titel in der Datei, werden sie aus dem Plan übernommen.
       </p>
       <code style={{ display: 'block', fontSize: '0.8rem', padding: 10, background: 'var(--surface-2)', borderRadius: 8, whiteSpace: 'pre', overflowX: 'auto' }}>
         {'Datum;Titel;Saal EG;Kinderprogramm;Livestream\n05.01.2025;Gottesdienst;142;31;58'}
@@ -527,6 +533,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (messag
         {file && <small>{file.name}</small>}
       </div>
       <Checkbox checked={createLocations} onChange={setCreateLocations} label="Unbekannte Spalten als neue Orte anlegen" />
+      <Checkbox checked={matchPlans} onChange={setMatchPlans} label={MATCH_LABEL} />
       <Alert>{load.error ?? run.error}</Alert>
       {load.busy && <Spinner label="Datei wird geprüft …" />}
       {preview && (
@@ -581,6 +588,35 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (messag
               </tbody>
             </table>
           </div>
+          {preview.matching && importable > 0 && (
+            <>
+              <MatchingInfo matching={preview.matching} total={importable} />
+              {!preview.matching.error && (
+                <div className="table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Datum</th>
+                        <th>Titel</th>
+                        <th>Plan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.matching.rows.map((r) => (
+                        <tr key={r.line}>
+                          <td>{fmtDate(r.date)}</td>
+                          <td>{r.title}</td>
+                          <td style={{ maxWidth: 280 }}>
+                            <PlanMatchBadge plan={r.plan} ambiguous={r.ambiguous} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </Modal>

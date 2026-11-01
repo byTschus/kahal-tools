@@ -197,7 +197,7 @@ class PcoClient implements PlanningClient {
 
     const lists = await Promise.all(
       sources.map(async (source) => {
-        const { data } = await this.getAll(`/services/v2/service_types/${source.id}/plans?${params}`, 2);
+        const { data } = await this.getAll(`/services/v2/service_types/${source.id}/plans?${params}`, Math.max(2, Math.ceil(limit / 100)));
         return data.map<PlanningEventSummary>((plan) => ({
           id: `${source.id}:${plan.id}`,
           title: plan.attributes.title || plan.attributes.series_title || source.name,

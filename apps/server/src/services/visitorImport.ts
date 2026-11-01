@@ -25,6 +25,14 @@ export interface ImportRow {
   livestream: number | null;
   notes: string | null;
   duplicate: boolean;
+  /** Uhrzeit fehlte in der Datei (Standard 10:00) */
+  timeGuessed: boolean;
+  /** Titel fehlte in der Datei (Standard „Gottesdienst“) */
+  titleGuessed: boolean;
+  /** Automatisch zugeordneter Plan */
+  plan?: { planId: string; title: string; startsAt: string | null } | null;
+  /** Mehrere Pläne passen gleich gut */
+  ambiguous?: boolean;
 }
 
 export interface ImportResult {
@@ -233,7 +241,17 @@ export async function analyzeImport(tenantId: string, timeZone: string, table: C
     }
     const finalTitle = (title || DEFAULT_TITLE).slice(0, 190);
     const key = `${eventDate.toISOString()}|${norm(finalTitle)}`;
-    rows.push({ line, date: eventDate.toISOString(), title: finalTitle, values, livestream, notes, duplicate: existingKeys.has(key) || seen.has(key) });
+    rows.push({
+      line,
+      date: eventDate.toISOString(),
+      title: finalTitle,
+      values,
+      livestream,
+      notes,
+      duplicate: existingKeys.has(key) || seen.has(key),
+      timeGuessed: !time && d.h === undefined,
+      titleGuessed: !title,
+    });
     seen.add(key);
   });
   return { columns, rows, errors };
@@ -258,8 +276,10 @@ export async function commitImport(tenantId: string, userId: string, result: Imp
         prisma.visitorCount.create({
           data: {
             tenantId,
-            eventTitle: r.title,
-            eventDate: new Date(r.date),
+            // Fehlende Angaben aus dem zugeordneten Plan übernehmen
+            eventTitle: r.plan && r.titleGuessed ? r.plan.title.slice(0, 190) : r.title,
+            eventDate: r.plan?.startsAt && r.timeGuessed ? new Date(r.plan.startsAt) : new Date(r.date),
+            planId: r.plan?.planId ?? null,
             livestreamEnabled: r.livestream !== null,
             livestreamCount: r.livestream,
             notes: r.notes,
@@ -275,5 +295,5 @@ export async function commitImport(tenantId: string, userId: string, result: Imp
       ),
     );
   }
-  return { imported: rows.length, skipped: result.rows.length - rows.length };
+  return { imported: rows.length, skipped: result.rows.length - rows.length, linked: rows.filter((r) => r.plan).length };
 }

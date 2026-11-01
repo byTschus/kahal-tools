@@ -2,6 +2,7 @@ import { Check, Code, Copy, Download, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PlanLink, type PlanRef } from '../components/PlanLink';
+import { MATCH_LABEL, MatchingInfo, PlanMatchBadge, type MatchedPlan, type MatchingSummary } from '../components/PlanMatch';
 import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, PageHeader, Progress, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
 import { useCan, useMe } from '../lib/auth';
@@ -268,25 +269,32 @@ interface FeedPreview {
   channel: { title: string; description: string; author: string; imageUrl: string };
   total: number;
   new: number;
-  episodes: { title: string; publishedAt: string | null; durationSec: number | null; isNew: boolean }[];
+  matching?: MatchingSummary;
+  episodes: { title: string; publishedAt: string | null; durationSec: number | null; isNew: boolean; plan: MatchedPlan | null; ambiguous: boolean }[];
 }
 
 function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
   const [url, setUrl] = useState('');
   const [adoptChannel, setAdoptChannel] = useState(true);
+  const [matchPlans, setMatchPlans] = useState(true);
   const [preview, setPreview] = useState<FeedPreview | null>(null);
   const load = useAction();
   const run = useAction();
 
-  const loadPreview = async () => {
+  const loadPreview = async (match = matchPlans) => {
     setPreview(null);
-    const res = await load.run(() => api.post<FeedPreview>('/api/podcasts/import-feed', { url }));
+    const res = await load.run(() => api.post<FeedPreview>('/api/podcasts/import-feed', { url, matchPlans: match }));
     if (res) setPreview(res);
   };
 
   const commit = async () => {
-    const res = await run.run(() => api.post<{ imported: number; skipped: number }>('/api/podcasts/import-feed', { url, commit: true, adoptChannel }));
-    if (res) onDone(`${res.imported} Episoden importiert${res.skipped ? `, ${res.skipped} bereits vorhanden` : ''}.`);
+    const res = await run.run(() =>
+      api.post<{ imported: number; skipped: number; linked: number; matchError?: string }>('/api/podcasts/import-feed', { url, commit: true, adoptChannel, matchPlans }),
+    );
+    if (res)
+      onDone(
+        `${res.imported} Episoden importiert${res.linked ? `, ${res.linked} davon einem Plan zugeordnet` : ''}${res.skipped ? `, ${res.skipped} bereits vorhanden` : ''}.${res.matchError ? ` ${res.matchError}` : ''}`,
+      );
   };
 
   return (
@@ -303,16 +311,25 @@ function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (me
       }
     >
       <p className="muted">
-        Übernimmt die Episoden eines bestehenden RSS-Feeds. Die Audiodateien bleiben beim bisherigen Anbieter und werden verlinkt. Einen Plan kannst du später beim
-        Bearbeiten einer Episode verknüpfen.
+        Übernimmt die Episoden eines bestehenden RSS-Feeds. Die Audiodateien bleiben beim bisherigen Anbieter und werden verlinkt. Die Episoden können anhand des
+        Veröffentlichungsdatums automatisch einem Plan zugeordnet werden, sonst verknüpfst du den Plan später beim Bearbeiten.
       </p>
       <div className="row" style={{ flexWrap: 'nowrap' }}>
         <input type="url" placeholder="https://… /feed.xml" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && url && loadPreview()} />
-        <Button busy={load.busy} disabled={!url.trim()} onClick={loadPreview}>
+        <Button busy={load.busy} disabled={!url.trim()} onClick={() => loadPreview()}>
           Feed laden
         </Button>
       </div>
+      <Checkbox
+        checked={matchPlans}
+        onChange={(v) => {
+          setMatchPlans(v);
+          if (preview) void loadPreview(v);
+        }}
+        label={MATCH_LABEL}
+      />
       <Alert>{load.error ?? run.error}</Alert>
+      {load.busy && matchPlans && <Spinner label="Feed und Pläne werden geladen …" />}
       {preview && (
         <div className="stack">
           <div className="row" style={{ flexWrap: 'nowrap' }}>
@@ -324,6 +341,7 @@ function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (me
               </div>
             </div>
           </div>
+          {preview.matching && preview.new > 0 && <MatchingInfo matching={preview.matching} total={preview.new} />}
           <div className="scroll-list" style={{ maxHeight: 260 }}>
             {preview.episodes.map((e, i) => (
               <div key={i} className="list-item" style={{ cursor: 'default', opacity: e.isNew ? 1 : 0.55 }}>
@@ -333,7 +351,16 @@ function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (me
                     {fmtDate(e.publishedAt, false)} {e.durationSec ? `· ${fmtDuration(e.durationSec)}` : ''}
                   </div>
                 </div>
-                {!e.isNew && <Badge plain>bereits vorhanden</Badge>}
+                {!e.isNew ? (
+                  <Badge plain>bereits vorhanden</Badge>
+                ) : (
+                  preview.matching &&
+                  !preview.matching.error && (
+                    <div style={{ maxWidth: '45%' }}>
+                      <PlanMatchBadge plan={e.plan} ambiguous={e.ambiguous} />
+                    </div>
+                  )
+                )}
               </div>
             ))}
           </div>
