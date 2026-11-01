@@ -7,7 +7,7 @@ import { getSettings } from '../settings.js';
 /**
  * Öffentliches Podcast-Widget zum Einbetten per iframe: /embed/<gemeinde>/podcast
  * Zeigt die neueste Episode mit Player und Link zum passenden YouTube-Stream (nur wenn vorhanden); mit Pfeilen durch ältere Episoden blättern.
- * Optionen: ?theme=light|dark|auto, ?accent=1f6f5c (Hex ohne #), ?nr=0 (0 = neueste)
+ * Optionen: ?theme=light|dark|auto, ?accent=1f6f5c (beliebige Farbe als Hex ohne #), ?nr=0 (0 = neueste)
  */
 export const embedRouter = Router();
 
@@ -28,19 +28,28 @@ function dateParts(date: Date, timeZone: string) {
   return { day: p.day, month: MONTHS[Number(p.month) - 1], year: p.year };
 }
 
+/** Schrift auf der Akzentfarbe: weiss oder dunkel, je nach Helligkeit der Farbe */
+function onAccent(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#111' : '#fff';
+}
+
 const fmtTime = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 
 const ICONS = {
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>',
   video: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 10.5 21 7.5v9l-5.5-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
-  download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  headphones: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   prev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 const STYLE = `
 *{box-sizing:border-box;margin:0}
+:root{color-scheme:light dark}
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
 :root{--bg:#ffffff;--fg:#1c1f1e;--muted:#69706d;--line:#e4e6e3;--soft:#f3f4f1;--accent:#1f6f5c;--on-accent:#fff}
 :root[data-theme=dark]{--bg:#161918;--fg:#ecefed;--muted:#9aa29e;--line:#2b302e;--soft:#202423;--accent:#5cb59b;--on-accent:#0f1513}
 @media (prefers-color-scheme:dark){:root[data-theme=auto]{--bg:#161918;--fg:#ecefed;--muted:#9aa29e;--line:#2b302e;--soft:#202423;--accent:#5cb59b;--on-accent:#0f1513}}
@@ -62,15 +71,15 @@ body{font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Ar
 .bar{flex:1;height:6px;border-radius:3px;background:var(--soft);position:relative;cursor:pointer}
 .bar span{position:absolute;inset:0 auto 0 0;width:0;border-radius:3px;background:var(--accent)}
 .time{flex:none;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:74px;text-align:right}
-.foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.btn{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--line);color:var(--fg);text-decoration:none;font-size:13px;font-weight:500}
+.foot{display:flex;align-items:center;gap:8px}
+.btn{width:42px;height:42px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--line);color:var(--accent);text-decoration:none}
 .btn:hover{background:var(--soft)}
-.btn svg{width:16px;height:16px}
-.nav{margin-left:auto;display:flex;gap:4px}
-.nav a,.nav span{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--fg);border:1px solid var(--line)}
+.btn svg{width:24px;height:24px}
+.nav{margin-left:auto;display:flex;gap:6px}
+.nav a,.nav span{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;color:var(--fg);border:1px solid var(--line)}
 .nav a:hover{background:var(--soft)}
 .nav span{opacity:.35}
-.nav svg{width:16px;height:16px}
+.nav svg{width:20px;height:20px}
 .empty{color:var(--muted);text-align:center;padding:24px 0}
 `;
 
@@ -133,8 +142,8 @@ embedRouter.get('/embed/:slug/podcast', async (req, res) => {
     <audio id="audio" preload="none" src="${esc(episode.audioUrl)}" data-duration="${duration}"></audio>
   </div>
   <div class="foot">
-    ${video ? `<a class="btn" href="${esc(video)}" target="_blank" rel="noopener">${ICONS.video}Video</a>` : ''}
-    <a class="btn" href="${esc(episode.audioUrl)}" target="_blank" rel="noopener" download>${ICONS.download}MP3</a>
+    ${video ? `<a class="btn" href="${esc(video)}" target="_blank" rel="noopener" title="Video ansehen" aria-label="Video ansehen">${ICONS.video}</a>` : ''}
+    <a class="btn" href="${esc(episode.audioUrl)}" target="_blank" rel="noopener" download title="MP3 herunterladen" aria-label="MP3 herunterladen">${ICONS.headphones}</a>
     <nav class="nav" aria-label="Weitere Predigten">
       ${nr + 1 < total ? `<a href="${link(nr + 1)}" aria-label="Ältere Predigt">${ICONS.prev}</a>` : `<span>${ICONS.prev}</span>`}
       ${nr > 0 ? `<a href="${link(nr - 1)}" aria-label="Neuere Predigt">${ICONS.next}</a>` : `<span>${ICONS.next}</span>`}
@@ -154,7 +163,7 @@ embedRouter.get('/embed/:slug/podcast', async (req, res) => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
-<style>${STYLE}${accent ? `:root:root{--accent:${accent};--on-accent:#fff}` : ''}</style>
+<style>${STYLE}${accent ? `:root:root{--accent:${accent};--on-accent:${onAccent(accent)}}` : ''}</style>
 </head>
 <body>
 ${body}

@@ -344,27 +344,81 @@ function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (me
   );
 }
 
+const DEFAULT_ACCENT = '#1f6f5c';
+
 function EmbedModal({ onClose }: { onClose: () => void }) {
   const { me } = useMe();
   const [theme, setTheme] = useState<'auto' | 'light' | 'dark'>('auto');
+  const [accent, setAccent] = useState<string | null>(null);
+  const [hexInput, setHexInput] = useState('');
+  // Vorschau erst nach kurzer Pause neu laden, damit das Ziehen im Farbwähler flüssig bleibt
+  const [previewAccent, setPreviewAccent] = useState<string | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setPreviewAccent(accent), 300);
+    return () => clearTimeout(t);
+  }, [accent]);
+
   const base = `${window.location.origin}/embed/${me.tenant.slug}/podcast`;
-  const src = theme === 'auto' ? base : `${base}?theme=${theme}`;
-  const code = `<iframe src="${src}" title="Predigten" width="100%" height="250" style="max-width:560px;border:0" loading="lazy"></iframe>`;
+  const url = (color: string | null) => {
+    const q = new URLSearchParams({ ...(theme !== 'auto' ? { theme } : {}), ...(color ? { accent: color.slice(1) } : {}) }).toString();
+    return q ? `${base}?${q}` : base;
+  };
+  const src = url(accent);
+  const code = `<iframe src="${src}" title="Predigten" width="100%" height="200" style="max-width:560px;border:0" loading="lazy"></iframe>`;
+
+  const pick = (color: string | null) => {
+    setAccent(color);
+    setHexInput(color ?? '');
+  };
+
   return (
     <Modal title="Podcast einbetten" wide onClose={onClose}>
       <p className="muted">
         Zeigt die neueste Predigt mit Player und Video-Link auf eurer Webseite. Mit den Pfeilen lässt sich durch ältere Predigten blättern. Den Code einfach in
         die Webseite einfügen.
       </p>
-      <Tabs
-        tabs={[
-          { key: 'auto', label: 'Automatisch' },
-          { key: 'light', label: 'Hell' },
-          { key: 'dark', label: 'Dunkel' },
-        ]}
-        value={theme}
-        onChange={setTheme}
-      />
+      <div className="grid grid-2">
+        <Field label="Darstellung">
+          <Tabs
+            tabs={[
+              { key: 'auto', label: 'Automatisch' },
+              { key: 'light', label: 'Hell' },
+              { key: 'dark', label: 'Dunkel' },
+            ]}
+            value={theme}
+            onChange={setTheme}
+          />
+        </Field>
+        <Field label="Akzentfarbe" hint="Für Play-Knopf, Fortschritt, Monat und Symbole">
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <input
+              type="color"
+              value={accent ?? DEFAULT_ACCENT}
+              onChange={(e) => pick(e.target.value)}
+              aria-label="Akzentfarbe wählen"
+              style={{ width: 44, height: 36, padding: 2, flex: 'none', cursor: 'pointer' }}
+            />
+            <input
+              type="text"
+              value={hexInput}
+              placeholder={DEFAULT_ACCENT}
+              maxLength={7}
+              style={{ maxWidth: 110, fontFamily: 'monospace' }}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                setHexInput(v);
+                const hex = v.startsWith('#') ? v : `#${v}`;
+                if (/^#[0-9a-f]{6}$/i.test(hex)) setAccent(hex.toLowerCase());
+              }}
+            />
+            {accent && (
+              <Button size="small" variant="ghost" onClick={() => pick(null)}>
+                Standard
+              </Button>
+            )}
+          </div>
+        </Field>
+      </div>
       <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
         <code style={{ flex: 1, minWidth: 0, wordBreak: 'break-all', fontSize: '0.8rem', padding: 10, background: 'var(--surface-2)', borderRadius: 8 }}>{code}</code>
         <CopyButton text={code} />
@@ -372,8 +426,7 @@ function EmbedModal({ onClose }: { onClose: () => void }) {
       <div className="label" style={{ marginTop: 8 }}>
         Vorschau
       </div>
-      <iframe key={src} src={src} title="Vorschau" width="100%" height="250" style={{ maxWidth: 560, border: 0 }} />
-      <small>Farbe anpassen: an die Adresse „?accent=1f6f5c“ anhängen (Hex-Farbcode ohne #).</small>
+      <iframe key={url(previewAccent)} src={url(previewAccent)} title="Vorschau" width="100%" height="200" style={{ maxWidth: 560, border: 0 }} />
     </Modal>
   );
 }
