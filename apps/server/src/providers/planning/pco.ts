@@ -132,10 +132,30 @@ class PcoClient implements PlanningClient {
     return { data, included };
   }
 
+  /**
+   * Organisation der angemeldeten Person. /people/v2 liefert sie nur mit Zugriff auf "People";
+   * Personen ohne diesen Zugriff (z.B. nur Services) bekommen dort 403. Dann über Services versuchen
+   * und zuletzt die Organisations-ID aus /me (meta.parent) verwenden.
+   */
+  private async getOrganization(): Promise<JsonApiResource> {
+    for (const path of ['/people/v2', '/services/v2']) {
+      try {
+        const doc = await this.get(path);
+        const org = doc.data as JsonApiResource;
+        if (org?.type === 'Organization') return org;
+      } catch (err) {
+        if ((err as HttpError).status === 401) throw err;
+      }
+    }
+    const me = await this.get('/people/v2/me');
+    const parent = (me as { meta?: { parent?: { id?: string; type?: string } } }).meta?.parent;
+    if (parent?.type === 'Organization' && parent.id) return { id: parent.id, type: 'Organization', attributes: {} } as JsonApiResource;
+    throw new HttpError(403, 'Planning Center: Die Gemeinde dieses Kontos konnte nicht ermittelt werden. Bitte in Planning Center Zugriff auf People oder Services geben.');
+  }
+
   async getIdentity(): Promise<PlanningIdentity> {
-    const [me, org] = await Promise.all([this.get('/people/v2/me?include=emails'), this.get('/people/v2')]);
+    const [me, orgData] = await Promise.all([this.get('/people/v2/me?include=emails'), this.getOrganization()]);
     const person = me.data as JsonApiResource;
-    const orgData = org.data as JsonApiResource;
     const emails = (me.included ?? []).filter((r) => r.type === 'Email');
     const email = emails.find((e) => e.attributes.primary) ?? emails[0];
     return {

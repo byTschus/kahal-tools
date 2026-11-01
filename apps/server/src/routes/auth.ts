@@ -102,7 +102,7 @@ authRouter.get('/auth/:provider/callback', async (req, res) => {
     const identity = await provider.createClient(tokens).getIdentity();
 
     if (tenant && tenant.externalOrgId !== identity.org.externalId) {
-      return fail(`Dieses ${provider.label}-Konto gehört zu „${identity.org.name}“, nicht zu „${tenant.name}“.`);
+      return fail(identity.org.name ? `Dieses ${provider.label}-Konto gehört zu „${identity.org.name}“, nicht zu „${tenant.name}“.` : `Dieses ${provider.label}-Konto gehört nicht zu „${tenant.name}“.`);
     }
     if (setupApp) {
       const existing = await prisma.tenant.findUnique({
@@ -165,8 +165,8 @@ export async function loginUser(providerKey: string, identity: PlanningIdentity,
   if (!tenant) {
     const created = await prisma.tenant.create({
       data: {
-        slug: await uniqueSlug(identity.org.name),
-        name: identity.org.name,
+        slug: await uniqueSlug(identity.org.name ?? 'gemeinde'),
+        name: identity.org.name ?? 'Gemeinde',
         planningProvider: providerKey,
         externalOrgId: identity.org.externalId,
         timeZone: identity.org.timeZone ?? 'Europe/Zurich',
@@ -180,7 +180,7 @@ export async function loginUser(providerKey: string, identity: PlanningIdentity,
 
   await prisma.tenant.update({
     where: { id: tenant.id },
-    data: { name: identity.org.name, timeZone: identity.org.timeZone ?? tenant.timeZone, avatarUrl: identity.org.avatarUrl ?? tenant.avatarUrl },
+    data: { name: identity.org.name ?? tenant.name, timeZone: identity.org.timeZone ?? tenant.timeZone, avatarUrl: identity.org.avatarUrl ?? tenant.avatarUrl },
   });
 
   const existing = await prisma.user.findUnique({

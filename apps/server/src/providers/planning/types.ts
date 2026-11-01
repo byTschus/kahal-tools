@@ -19,7 +19,8 @@ export interface OAuthAppCreds {
 }
 
 export interface PlanningIdentity {
-  org: { externalId: string; name: string; timeZone?: string; avatarUrl?: string };
+  /** name fehlt, wenn das Konto die Organisation nicht lesen darf (dann nur die ID bekannt) */
+  org: { externalId: string; name?: string; timeZone?: string; avatarUrl?: string };
   person: { externalId: string; name: string; email?: string; avatarUrl?: string };
 }
 
