@@ -24,6 +24,7 @@
     "express": "^5.1.0",
     "fast-xml-parser": "^5.11.2",
     "jose": "^6.1.0",
+    "nodemailer": "^7.0.13",
     "prisma": "^6.19.0",
     "zod": "^4.1.12"
   },
@@ -31,6 +32,7 @@
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.3",
     "@types/node": "^22.18.0",
+    "@types/nodemailer": "^8.0.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }

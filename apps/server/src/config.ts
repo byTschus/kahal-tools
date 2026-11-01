@@ -26,6 +26,17 @@ export const config = {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   },
+  /** E-Mail-Versand (z.B. Einladungen). Ohne SMTP_HOST werden keine E-Mails verschickt. */
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: Number(process.env.SMTP_PORT || 465),
+    /** true = TLS ab Verbindungsbeginn (Port 465), false = STARTTLS (Port 587) */
+    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : Number(process.env.SMTP_PORT || 465) === 465,
+    user: process.env.SMTP_USER ?? '',
+    password: process.env.SMTP_PASSWORD ?? '',
+    /** Absender, z.B. "kahal.tools <noreply@deine-domain.ch>" (Standard: SMTP_USER) */
+    from: process.env.MAIL_FROM || process.env.SMTP_USER || '',
+  },
   /** Worker-Server in der OpenStack-Cloud nach Bedarf starten/stoppen (optional, für alle Gemeinden gemeinsam) */
   workerServer: {
     authUrl: process.env.OPENSTACK_AUTH_URL || 'https://api.pub1.infomaniak.cloud/identity/v3',

@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Search, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Mail, Search, ShieldCheck, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmButton, Field, Modal, Spinner } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
@@ -26,6 +26,49 @@ export interface GroupRow {
   memberIds: string[];
 }
 
+export interface InviteResult {
+  status: 'sent' | 'disabled' | 'no-email' | 'failed';
+  error?: string;
+  loginUrl: string;
+}
+
+type Message = { kind: 'success' | 'warning'; text: string; link?: string };
+
+/** Meldung nach dem Versand einer Einladung */
+function inviteMessage(name: string, email: string | null, invite: InviteResult, again = false): Message {
+  const intro = again ? '' : `${name} wurde eingeladen. `;
+  switch (invite.status) {
+    case 'sent':
+      return { kind: 'success', text: `${intro}Die Einladung mit dem Login-Link wurde an ${email} geschickt.` };
+    case 'no-email':
+      return { kind: 'warning', text: `${intro}Im Planungstool ist keine E-Mail-Adresse hinterlegt. Schicke ${name} den Login-Link selbst:`, link: invite.loginUrl };
+    case 'failed':
+      return { kind: 'warning', text: `${intro}Die E-Mail konnte nicht verschickt werden (${invite.error}). Schicke ${name} den Login-Link selbst:`, link: invite.loginUrl };
+    default:
+      return { kind: 'success', text: `${intro}Schicke ${name} den Login-Link, die Person hat nach der Anmeldung Zugriff:`, link: invite.loginUrl };
+  }
+}
+
+function CopyLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="row" style={{ gap: 8, marginTop: 6 }}>
+      <code style={{ fontSize: '0.8rem' }}>{url}</code>
+      <Button
+        size="small"
+        icon={copied ? Check : Copy}
+        onClick={async () => {
+          await navigator.clipboard.writeText(url);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }}
+      >
+        {copied ? 'Kopiert' : 'Kopieren'}
+      </Button>
+    </span>
+  );
+}
+
 const STATUS: Record<UserRow['status'], { label: string; color?: 'green' | 'red' | 'blue' | 'yellow' }> = {
   active: { label: 'Aktiv', color: 'green' },
   invited: { label: 'Eingeladen', color: 'blue' },
@@ -43,21 +86,40 @@ export function UsersSettings() {
   const { me, reload: reloadMe } = useMe();
   const { data: users, loading, error, reload } = useApi<UserRow[]>('/api/users');
   const { data: groups } = useApi<GroupRow[]>('/api/groups');
+  const { data: inviteInfo } = useApi<{ mailEnabled: boolean; loginUrl: string }>('/api/users/invite-info');
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [inviting, setInviting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
 
   const approve = async (u: UserRow) => {
     await api.patch(`/api/users/${u.id}`, { status: 'active' });
-    setMessage(`${u.name} wurde freigeschaltet. Vergib jetzt noch die passenden Rechte.`);
+    setMessage({ kind: 'success', text: `${u.name} wurde freigeschaltet. Vergib jetzt noch die passenden Rechte.` });
     void reload();
+  };
+
+  const resend = async (u: UserRow) => {
+    setSending(u.id);
+    try {
+      const invite = await api.post<InviteResult>(`/api/users/${u.id}/invite-mail`);
+      setMessage(inviteMessage(u.name, u.email, invite, true));
+    } catch (err) {
+      setMessage({ kind: 'warning', text: (err as Error).message });
+    } finally {
+      setSending(null);
+    }
   };
 
   const pending = users?.filter((u) => u.status === 'pending') ?? [];
 
   return (
     <>
-      <Alert kind="success">{message}</Alert>
+      {message && (
+        <Alert kind={message.kind}>
+          {message.text}
+          {message.link && <CopyLink url={message.link} />}
+        </Alert>
+      )}
       {pending.length > 0 && (
         <Card title="Zugangsanfragen">
           {pending.map((u) => (
@@ -140,6 +202,22 @@ export function UsersSettings() {
                     </td>
                     <td>
                       <div className="actions">
+                        {u.status === 'invited' &&
+                          (inviteInfo?.mailEnabled && u.email ? (
+                            <Button size="small" icon={Mail} busy={sending === u.id} onClick={() => resend(u)} title={`Einladung erneut an ${u.email} senden`}>
+                              Erneut senden
+                            </Button>
+                          ) : (
+                            inviteInfo && (
+                              <Button
+                                size="small"
+                                icon={Copy}
+                                onClick={() => setMessage({ kind: 'success', text: `Login-Link für ${u.name}:`, link: inviteInfo.loginUrl })}
+                              >
+                                Login-Link
+                              </Button>
+                            )
+                          ))}
                         <Button size="small" icon={ShieldCheck} onClick={() => setEditing(u)}>
                           Rechte
                         </Button>
@@ -151,8 +229,7 @@ export function UsersSettings() {
                                 await api.del(`/api/users/${u.id}`);
                                 void reload();
                               } catch (err) {
-                                setMessage(null);
-                                alert((err as Error).message);
+                                setMessage({ kind: 'warning', text: (err as Error).message });
                               }
                             }}
                           >
@@ -185,9 +262,10 @@ export function UsersSettings() {
         <InviteModal
           groups={groups}
           onClose={() => setInviting(false)}
-          onInvited={(name) => {
+          mailEnabled={inviteInfo?.mailEnabled ?? false}
+          onInvited={(person, invite) => {
             setInviting(false);
-            setMessage(`${name} wurde eingeladen. Sobald die Person sich mit dem Planungstool anmeldet, hat sie Zugriff.`);
+            setMessage(inviteMessage(person.name, person.email ?? null, invite));
             void reload();
           }}
         />
@@ -265,7 +343,17 @@ interface Person {
   alreadyAdded: boolean;
 }
 
-function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClose: () => void; onInvited: (name: string) => void }) {
+function InviteModal({
+  groups,
+  mailEnabled,
+  onClose,
+  onInvited,
+}: {
+  groups: GroupRow[];
+  mailEnabled: boolean;
+  onClose: () => void;
+  onInvited: (person: Person, invite: InviteResult) => void;
+}) {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [person, setPerson] = useState<Person | null>(null);
@@ -281,8 +369,8 @@ function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClo
 
   const submit = async () => {
     if (!person) return;
-    const ok = await save.run(() =>
-      api.post('/api/users/invite', {
+    const res = await save.run(() =>
+      api.post<{ invite: InviteResult }>('/api/users/invite', {
         externalPersonId: person.externalId,
         name: person.name,
         email: person.email ?? null,
@@ -291,7 +379,7 @@ function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClo
         permissions: perms,
       }),
     );
-    if (ok) onInvited(person.name);
+    if (res) onInvited(person, res.invite);
   };
 
   return (
@@ -305,8 +393,8 @@ function InviteModal({ groups, onClose, onInvited }: { groups: GroupRow[]; onClo
             <Button variant="ghost" icon={ArrowLeft} onClick={() => setPerson(null)}>
               Andere Person
             </Button>
-            <Button variant="primary" busy={save.busy} onClick={submit}>
-              Einladen
+            <Button variant="primary" icon={mailEnabled && person.email ? Mail : undefined} busy={save.busy} onClick={submit}>
+              {mailEnabled && person.email ? 'Einladen und E-Mail senden' : 'Einladen'}
             </Button>
           </>
         ) : null

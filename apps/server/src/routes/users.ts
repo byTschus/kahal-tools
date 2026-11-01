@@ -4,7 +4,11 @@ import { requireAdmin, tid } from '../auth/middleware.js';
 import { prisma } from '../db.js';
 import { HttpError, notFound } from '../lib/http.js';
 import { effectivePermissions, sanitizePermissions } from '../permissions.js';
+import { config } from '../config.js';
+import { getPlanningProvider } from '../providers/planning/index.js';
+import { inviteMail, mailEnabled, sendMail } from '../services/mail.js';
 import { planningClientFor } from '../services/planning.js';
+import type { Request } from 'express';
 
 export const usersRouter = Router();
 usersRouter.use('/api/users', requireAdmin);
@@ -27,6 +31,37 @@ function presentUser(u: any) {
     createdAt: u.createdAt,
   };
 }
+
+const loginUrlOf = (req: Request) => `${config.appUrl}/login/${req.user!.tenant.slug}`;
+
+type InviteMailResult = { status: 'sent' | 'disabled' | 'no-email' | 'failed'; error?: string; loginUrl: string };
+
+/** Schickt die Einladungs-E-Mail; Fehler verhindern die Einladung nicht, sondern werden zurückgemeldet */
+async function sendInvite(req: Request, user: { name: string; email: string | null }): Promise<InviteMailResult> {
+  const loginUrl = loginUrlOf(req);
+  if (!mailEnabled()) return { status: 'disabled', loginUrl };
+  if (!user.email) return { status: 'no-email', loginUrl };
+  const tenant = req.user!.tenant;
+  const mail = inviteMail({
+    name: user.name,
+    churchName: tenant.name,
+    inviterName: req.user!.name,
+    planningLabel: getPlanningProvider(tenant.planningProvider).label,
+    loginUrl,
+  });
+  try {
+    await sendMail({ to: user.email, replyTo: req.user!.email ?? undefined, ...mail });
+    return { status: 'sent', loginUrl };
+  } catch (err) {
+    console.warn('Einladungs-E-Mail fehlgeschlagen:', err instanceof Error ? err.message : err);
+    return { status: 'failed', error: err instanceof Error ? err.message : String(err), loginUrl };
+  }
+}
+
+/** Ob E-Mails verschickt werden können und der Login-Link der Gemeinde */
+usersRouter.get('/api/users/invite-info', async (req, res) => {
+  res.json({ mailEnabled: mailEnabled(), loginUrl: loginUrlOf(req) });
+});
 
 usersRouter.get('/api/users', async (req, res) => {
   const users = await prisma.user.findMany({ where: { tenantId: tid(req) }, include: userInclude, orderBy: { name: 'asc' } });
@@ -76,7 +111,15 @@ usersRouter.post('/api/users/invite', async (req, res) => {
     },
     include: userInclude,
   });
-  res.status(201).json(presentUser(user));
+  res.status(201).json({ ...presentUser(user), invite: await sendInvite(req, user) });
+});
+
+/** Einladungs-E-Mail erneut senden (nur für Personen, die sich noch nicht angemeldet haben) */
+usersRouter.post('/api/users/:id/invite-mail', async (req, res) => {
+  const user = await prisma.user.findFirst({ where: { id: String(req.params.id), tenantId: tid(req) } });
+  if (!user) throw notFound('Benutzer');
+  if (user.status !== 'invited') throw new HttpError(400, 'Diese Person hat sich bereits angemeldet');
+  res.json(await sendInvite(req, user));
 });
 
 const updateSchema = z.object({

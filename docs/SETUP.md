@@ -197,10 +197,30 @@ WORKER_TOKEN=...                   # zufällig, mind. 32 Zeichen – gleicher We
 ENABLE_MOCK_PLANNING=false
 RUN_SCHEDULER=true
 # Optional: OPENSTACK_* / WORKER_SERVER_* – Worker-Server nur bei Bedarf starten, siehe 6.4
+# Optional: SMTP_* / MAIL_FROM – Einladungs-E-Mails, siehe unten
 ```
 
 Zufallswerte erzeugen (auf dem Server): `openssl rand -base64 48`
 Sonderzeichen im DB-Passwort müssen in der `DATABASE_URL` URL-kodiert werden (z.B. `@` → `%40`).
+
+#### E-Mail-Versand (Einladungen)
+
+Damit eingeladene Personen automatisch eine E-Mail mit dem Login-Link bekommen, braucht kahal.tools ein Postfach zum Versenden. Ohne diese Angaben funktioniert alles wie bisher: Nach dem Einladen wird der Login-Link zum Kopieren angezeigt.
+
+1. Manager → **Mail** → bei deiner Domain eine Adresse anlegen, z.B. `noreply@deine-domain.ch`, und ein Passwort setzen.
+2. In der `.env` eintragen:
+
+```
+SMTP_HOST=mail.infomaniak.com
+SMTP_PORT=465
+SMTP_USER=noreply@deine-domain.ch
+SMTP_PASSWORD=...                  # Passwort des Postfachs
+MAIL_FROM="kahal.tools <noreply@deine-domain.ch>"
+```
+
+3. Site neu starten und eine Person einladen. Antworten auf die E-Mail gehen an die einladende Person (Reply-To).
+
+Lokal fängt Mailpit alle E-Mails ab: `docker compose up -d mail`, in der `.env` `SMTP_HOST=localhost`, `SMTP_PORT=1025`, `SMTP_SECURE=false`, Posteingang unter <http://localhost:8025>.
 
 ### 5.5 Build- und Startbefehl
 
@@ -322,7 +342,7 @@ Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker starte
    * Der **Streamschlüssel** sorgt dafür, dass OBS/der Encoder immer an denselben Schlüssel sendet; neue Livestreams werden automatisch damit verbunden.
 4. **Einstellungen → Podcast:** FTP-Daten eintragen → **Verbindung testen** → Vorlagen und Feed-Angaben ausfüllen.
 5. **Einstellungen → Besucherzähler:** Orte anlegen (Saal EG, Saal OG, …), Livestream-Zählung einstellen.
-6. **Einstellungen → Benutzer:** Personen aus PCO **einladen** und Rechte vergeben, oder **Gruppen** (z.B. „Technik“) anlegen. Personen, die sich selbst anmelden, erscheinen als Zugangsanfrage.
+6. **Einstellungen → Benutzer:** Personen aus PCO **einladen** (sie bekommen eine E-Mail mit dem Login-Link, sofern SMTP eingerichtet ist; „Erneut senden“ schickt sie nochmals) und Rechte vergeben, oder **Gruppen** (z.B. „Technik“) anlegen. Personen, die sich selbst anmelden, erscheinen als Zugangsanfrage.
 
 7. **Bestehende Daten übernehmen (optional):**
    * **Podcast → Feed importieren:** Adresse des bisherigen RSS-Feeds eingeben. Die Episoden erscheinen in der Liste und im neuen Feed; die Audiodateien bleiben beim bisherigen Anbieter.

@@ -3,6 +3,7 @@
 #   docker compose up -d db                 -> nur Datenbank (Node läuft direkt unter Windows / VS Code)
 #   docker compose --profile app up         -> Datenbank + App (Server + Web mit Hot Reload) im Container
 #   docker compose --profile worker up      -> zusätzlich den Podcast-Worker starten
+#   docker compose up -d mail               -> Test-Postfach für E-Mails (http://localhost:8025)
 #
 # Alternative: VS Code "Dev Containers: Reopen in Container" (siehe .devcontainer/)
 
@@ -25,6 +26,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Fängt alle E-Mails ab (z.B. Einladungen), nichts wird wirklich verschickt. Posteingang: http://localhost:8025
+  mail:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
   app:
     profiles: ["app"]
