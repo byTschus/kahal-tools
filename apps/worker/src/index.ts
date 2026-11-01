@@ -23,6 +23,9 @@ const YTDLP_COOKIES = process.env.YTDLP_COOKIES ?? '/data/cookies.txt';
 const YTDLP_JS_RUNTIME = process.env.YTDLP_JS_RUNTIME ?? 'node';
 // 6 = YouTube über IPv6 laden (Rechenzentrums-IPv4-Adressen werden oft als Bot blockiert), 4 = nur IPv4, leer = automatisch
 const YTDLP_IP_VERSION = process.env.YTDLP_IP_VERSION ?? '';
+// true = nur den Ausschnitt laden (yt-dlp schneidet über ffmpeg). Standard: ganze Audiospur mit dem eigenen
+// Downloader von yt-dlp laden und lokal schneiden – robuster (IPv6, Drosselung, frisch beendete Livestreams).
+const YTDLP_SECTIONS = process.env.YTDLP_SECTIONS === 'true';
 const YTDLP_EXTRA_ARGS = (process.env.YTDLP_EXTRA_ARGS ?? '').split(' ').filter(Boolean);
 const AUTO_UPDATE = process.env.YTDLP_AUTO_UPDATE !== 'false';
 
@@ -81,6 +84,17 @@ function hms(sec: number) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+/** Dauer einer Mediendatei in Sekunden, 0 wenn sie kein lesbares Audio enthält */
+async function probeDuration(file: string) {
+  try {
+    const out = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file]);
+    const value = Number(out.trim().split('\n').pop());
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function processPodcast(job: PodcastJob) {
   const p = job.payload;
   const report = progressReporter(job.id);
@@ -94,16 +108,10 @@ async function processPodcast(job: PodcastJob) {
   const keepAlive = setInterval(() => void report(lastProgress, undefined, true), 120_000);
 
   try {
-    // 1) Nur den benötigten Ausschnitt der Audiospur laden
+    // 1) Audiospur laden (nur Audio, kein Video)
     await step(2, 'Audio wird von YouTube geladen');
-    const args = [
-      '--no-playlist',
-      '--newline',
-      '--progress',
-      '-f', 'bestaudio[ext=m4a]/bestaudio/best',
-      '--download-sections', `*${hms(p.startSec)}-${hms(p.endSec)}`,
-      '-o', join(dir, 'source.%(ext)s'),
-    ];
+    const args = ['--no-playlist', '--newline', '--progress', '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-o', join(dir, 'source.%(ext)s')];
+    if (YTDLP_SECTIONS) args.push('--download-sections', `*${hms(p.startSec)}-${hms(p.endSec)}`);
     if (YTDLP_JS_RUNTIME) args.push('--js-runtimes', YTDLP_JS_RUNTIME);
     if (existsSync(YTDLP_COOKIES)) args.push('--cookies', YTDLP_COOKIES);
     if (YTDLP_IP_VERSION === '6' || YTDLP_IP_VERSION === '4') args.push(`-${YTDLP_IP_VERSION}`);
@@ -121,6 +129,11 @@ async function processPodcast(job: PodcastJob) {
     });
     const source = (await readdir(dir)).find((f) => f.startsWith('source.'));
     if (!source) throw new Error('yt-dlp hat keine Audiodatei erzeugt');
+    const sourceSec = await probeDuration(join(dir, source));
+    if (!sourceSec) throw new Error('Die von YouTube geladene Audiodatei ist leer. Ist das Video schon vollständig verarbeitet (bei Livestreams einige Minuten nach Ende warten)?');
+    if (!YTDLP_SECTIONS && p.startSec >= sourceSec) {
+      throw new Error(`Der Startpunkt (${hms(p.startSec)}) liegt hinter dem Ende des Videos (${hms(Math.floor(sourceSec))})`);
+    }
 
     // 2) Cover laden (optional)
     let cover: string | null = null;
@@ -139,7 +152,10 @@ async function processPodcast(job: PodcastJob) {
     // 3) MP3 kodieren (inkl. Lautheitsnormalisierung und ID3-Tags)
     await step(52, 'MP3 wird erstellt');
     const out = join(dir, 'episode.mp3');
-    const ff = ['-hide_banner', '-nostdin', '-y', '-i', join(dir, source)];
+    const ff = ['-hide_banner', '-nostdin', '-y'];
+    // Lokal schneiden; -ss vor -i springt direkt an die Stelle (bei Audio sample-genau)
+    if (!YTDLP_SECTIONS) ff.push('-ss', String(p.startSec), '-t', String(totalSec));
+    ff.push('-i', join(dir, source));
     if (cover) ff.push('-i', cover, '-map', '0:a', '-map', '1:v', '-c:v', 'mjpeg', '-vf', "scale='min(1400,iw)':-2", '-disposition:v', 'attached_pic');
     else ff.push('-map', '0:a');
     if (p.audio.normalize) ff.push('-af', 'loudnorm=I=-16:TP=-1.5:LRA=11');
@@ -155,8 +171,8 @@ async function processPodcast(job: PodcastJob) {
       }
     });
 
-    const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', out]);
-    const durationSec = Math.round(Number(probe.trim().split('\n').pop()));
+    const durationSec = Math.round(await probeDuration(out));
+    if (!durationSec) throw new Error('Die erstellte MP3-Datei enthält kein Audio. Bitte Start- und Endzeit prüfen.');
     const { size } = await stat(out);
 
     // 4) Hochladen
