@@ -23,9 +23,28 @@ export async function nextFileBase(tenantId: string) {
 }
 
 /** Link zum Video der Episode (YouTube oder Link aus dem importierten Feed) */
+/** Quellvideo der Episode (nur für Episoden, die aus einem Stream geschnitten wurden) */
 export function videoUrlOf(podcast: Podcast) {
   if (podcast.sourceProvider && podcast.sourceVideoId) return getStreamingProvider(podcast.sourceProvider).videoUrl(podcast.sourceVideoId);
-  return podcast.linkUrl;
+  return null;
+}
+
+const YOUTUBE_URL = /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//i;
+
+/**
+ * Passender YouTube-Stream einer Episode (für den Video-Link im iframe), sonst null:
+ * 1. Stream, aus dem die Episode geschnitten wurde
+ * 2. Livestream, der mit demselben Plan verknüpft ist (z.B. bei importierten Episoden)
+ * 3. Link aus dem importierten Feed, falls er auf YouTube zeigt
+ */
+export async function matchingStreamUrl(podcast: Podcast) {
+  const source = videoUrlOf(podcast);
+  if (source) return source;
+  if (podcast.planId) {
+    const stream = await prisma.livestream.findFirst({ where: { tenantId: podcast.tenantId, planId: podcast.planId } });
+    if (stream) return getStreamingProvider(stream.provider).videoUrl(stream.externalId);
+  }
+  return podcast.linkUrl && YOUTUBE_URL.test(podcast.linkUrl) ? podcast.linkUrl : null;
 }
 
 export const durationOf = (p: Podcast) => p.durationSec ?? (p.endSec != null && p.startSec != null ? p.endSec - p.startSec : 0);

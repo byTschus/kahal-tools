@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { notFound } from '../lib/http.js';
-import { durationOf, videoUrlOf } from '../services/podcasts.js';
+import { durationOf, matchingStreamUrl } from '../services/podcasts.js';
 import { getSettings } from '../settings.js';
 
 /**
  * Öffentliches Podcast-Widget zum Einbetten per iframe: /embed/<gemeinde>/podcast
- * Zeigt die neueste Episode mit Player und Video-Link; mit Pfeilen durch ältere Episoden blättern.
+ * Zeigt die neueste Episode mit Player und Link zum passenden YouTube-Stream (nur wenn vorhanden); mit Pfeilen durch ältere Episoden blättern.
  * Optionen: ?theme=light|dark|auto, ?accent=1f6f5c (Hex ohne #), ?nr=0 (0 = neueste)
  */
 export const embedRouter = Router();
@@ -117,7 +117,7 @@ embedRouter.get('/embed/:slug/podcast', async (req, res) => {
     const d = dateParts(episode.publishedAt ?? episode.createdAt, tenant.timeZone);
     const meta = [episode.scripture, episode.speaker].filter(Boolean).map(esc).join(' · ');
     const duration = durationOf(episode);
-    const video = videoUrlOf(episode);
+    const video = await matchingStreamUrl(episode);
     body = `<article class="card">
   <div class="head">
     <div class="date" aria-hidden="true"><div class="d">${esc(d.day)}</div><div class="m">${esc(d.month)}</div><div class="y">${esc(d.year)}</div></div>
