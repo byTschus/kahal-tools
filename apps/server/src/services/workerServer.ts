@@ -26,7 +26,8 @@ let busy = false;
 async function manage() {
   const now = Date.now();
   const [pending, lastJob] = await Promise.all([
-    prisma.job.count({ where: { status: { in: ['queued', 'processing'] }, runAfter: { lte: new Date(now + 5 * 60_000) } } }),
+    // Feed-Uploads sind kein Grund, den Server zu starten – sie laufen mit, wenn er ohnehin läuft
+    prisma.job.count({ where: { status: { in: ['queued', 'processing'] }, type: { not: 'podcast.feed' }, runAfter: { lte: new Date(now + 5 * 60_000) } } }),
     prisma.job.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
   ]);
 

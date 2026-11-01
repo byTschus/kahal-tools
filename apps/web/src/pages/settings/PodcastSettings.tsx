@@ -112,7 +112,7 @@ export function PodcastSettings() {
               <Field label="Beschreibung">
                 <textarea className="prose" rows={3} value={s.form.feed.description} onChange={(e) => setFeed('description', e.target.value)} />
               </Field>
-              <Checkbox checked={s.form.uploadFeed} onChange={(v) => s.set('uploadFeed', v)} label="Feed zusätzlich als feed.xml auf den FTP-Server hochladen" />
+              <Checkbox checked={s.form.uploadFeed} onChange={(v) => s.set('uploadFeed', v)} label="Feed zusätzlich als feed.xml auf den FTP-Server hochladen (aktualisiert der Worker beim nächsten Podcast)" />
             </div>
           </Card>
           <Card>

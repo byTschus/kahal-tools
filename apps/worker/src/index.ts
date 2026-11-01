@@ -53,7 +53,14 @@ interface PdfJob {
   payload: { podcastId: string; filePath: string; fileName: string; host: HostSpec };
 }
 
-const JOB_TYPES = ['podcast.render', 'podcast.pdf'];
+interface FeedJob {
+  id: string;
+  type: string;
+  attempt: number;
+  payload: { fileName: string; content: string; host: HostSpec };
+}
+
+const JOB_TYPES = ['podcast.render', 'podcast.pdf', 'podcast.feed'];
 
 let stopping = false;
 const activeJobs = new Set<string>();
@@ -220,12 +227,27 @@ async function processPdf(job: PdfJob) {
   }
 }
 
-async function handle(job: PodcastJob | PdfJob) {
+/** feed.xml (vom Server erzeugt) auf das Podcast-Hosting laden */
+async function processFeed(job: FeedJob) {
+  const dir = await mkdtemp(join(TMP_DIR, 'kahal-'));
+  try {
+    const file = join(dir, 'feed.xml');
+    await writeFile(file, job.payload.content, 'utf8');
+    await upload(job.payload.host, file, job.payload.fileName, () => {});
+    await api(`/jobs/${job.id}/complete`, { result: {} });
+    log(`${job.payload.fileName} aktualisiert`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function handle(job: PodcastJob | PdfJob | FeedJob) {
   activeJobs.add(job.id);
   log(`Auftrag ${job.id} (${job.type}, Versuch ${job.attempt}) gestartet`);
   try {
     if (job.type === 'podcast.render') await processPodcast(job as PodcastJob);
     else if (job.type === 'podcast.pdf') await processPdf(job as PdfJob);
+    else if (job.type === 'podcast.feed') await processFeed(job as FeedJob);
     else throw new Error(`Unbekannter Auftragstyp ${job.type}`);
   } catch (err) {
     const message = (err as Error).message ?? String(err);
@@ -240,7 +262,7 @@ async function handle(job: PodcastJob | PdfJob) {
 async function slot(n: number) {
   while (!stopping) {
     try {
-      const job = (await api('/claim', { types: JOB_TYPES })) as PodcastJob | PdfJob | null;
+      const job = (await api('/claim', { types: JOB_TYPES })) as PodcastJob | PdfJob | FeedJob | null;
       if (job?.id) {
         await handle(job);
         continue;

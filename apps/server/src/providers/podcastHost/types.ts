@@ -1,7 +1,7 @@
 /**
  * Schnittstelle für Podcast-Hosting (FTP, später z.B. Podigee, Spotify for Creators, S3 ...).
- * Der Upload der Audiodatei passiert im Worker (apps/worker/src/hosts), der Server verwaltet
- * Test, Löschen und optional den Feed-Upload.
+ * Alle Uploads (MP3, PDF, feed.xml) macht der Worker (apps/worker/src/hosts). Der Server nutzt nur
+ * Aktionen ohne Datenverbindung: Verbindungstest und Löschen.
  */
 
 export interface HostField {
@@ -25,6 +25,5 @@ export interface PodcastHostProvider {
   fields: HostField[];
   test(config: HostConfig, secrets: HostConfig): Promise<string>;
   deleteFile(config: HostConfig, secrets: HostConfig, fileName: string): Promise<void>;
-  uploadText(config: HostConfig, secrets: HostConfig, fileName: string, content: string): Promise<void>;
   publicUrl(config: HostConfig, fileName: string): string;
 }

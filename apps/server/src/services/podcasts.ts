@@ -6,11 +6,13 @@ import { prisma } from '../db.js';
 import { getStreamingProvider } from '../providers/streaming/index.js';
 import { getSettings } from '../settings.js';
 import { podcastHostFor, requirePodcastHost } from './integrations.js';
-import { registerJobHandler } from './jobs.js';
+import { enqueueJob, registerJobHandler } from './jobs.js';
 
 export const PODCAST_JOB = 'podcast.render';
 /** Lädt ein hochgeladenes PDF über den Worker auf das Podcast-Hosting */
 export const PODCAST_PDF_JOB = 'podcast.pdf';
+/** Lädt feed.xml über den Worker auf das Podcast-Hosting; startet den Worker-Server nicht */
+export const PODCAST_FEED_JOB = 'podcast.feed';
 
 /** Ablage hochgeladener PDFs, bis der Worker sie übertragen hat */
 export async function pdfUploadPath(podcastId: string) {
@@ -194,15 +196,33 @@ ${items}
 `;
 }
 
-/** Lädt den Feed zusätzlich auf das Podcast-Hosting (falls aktiviert). Fehler werden nur geloggt. */
+/**
+ * Lädt den Feed zusätzlich als feed.xml auf das Podcast-Hosting (falls aktiviert).
+ * Das macht der Worker; der Auftrag startet den Worker-Server nicht, sondern wird beim nächsten Lauf
+ * mit erledigt (z.B. direkt nach dem nächsten Podcast). Pro Gemeinde wartet höchstens ein Auftrag,
+ * der Feed wird erst beim Abholen erzeugt und ist damit immer aktuell.
+ */
 export async function syncFeed(tenantId: string) {
   try {
     const settings = await getSettings(tenantId, 'podcast');
-    if (!settings.uploadFeed) return;
-    const host = await podcastHostFor(tenantId);
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
-    if (host) await host.provider.uploadText(host.config, host.secrets, 'feed.xml', await buildFeed(tenant));
+    if (!settings.uploadFeed || !(await podcastHostFor(tenantId))) return;
+    const waiting = await prisma.job.count({ where: { tenantId, type: PODCAST_FEED_JOB, status: 'queued' } });
+    if (!waiting) await enqueueJob(tenantId, PODCAST_FEED_JOB, tenantId);
   } catch (err) {
-    console.warn('Feed-Upload fehlgeschlagen:', err instanceof Error ? err.message : err);
+    console.warn('Feed-Upload konnte nicht eingeplant werden:', err instanceof Error ? err.message : err);
   }
 }
+
+registerJobHandler(PODCAST_FEED_JOB, {
+  async buildPayload(job) {
+    const host = await requirePodcastHost(job.tenantId);
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: job.tenantId } });
+    return {
+      fileName: 'feed.xml',
+      content: await buildFeed(tenant),
+      host: { type: host.integration.provider, config: host.config, secrets: host.secrets },
+    };
+  },
+  async onComplete() {},
+  async onFailed() {},
+});

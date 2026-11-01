@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { requireUser, tid } from '../auth/middleware.js';
 import { HttpError } from '../lib/http.js';
 import { can, type ToolKey } from '../permissions.js';
+import { syncFeed } from '../services/podcasts.js';
 import { getSettings, isSettingsKey, saveSettings, type SettingsKey } from '../settings.js';
 
 export const settingsRouter = Router();
@@ -29,5 +30,8 @@ settingsRouter.get('/api/settings/:tool', requireUser, settingsKey, async (req, 
 settingsRouter.put('/api/settings/:tool', requireUser, settingsKey, async (req, res) => {
   const key = String(req.params.tool) as SettingsKey;
   checkAccess(req, key, true);
-  res.json(await saveSettings(tid(req), key, req.body));
+  const saved = await saveSettings(tid(req), key, req.body);
+  // Feed-Angaben geändert: feed.xml beim nächsten Worker-Lauf aktualisieren
+  if (key === 'podcast') await syncFeed(tid(req));
+  res.json(saved);
 });

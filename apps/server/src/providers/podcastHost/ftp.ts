@@ -1,5 +1,5 @@
 import { Client } from 'basic-ftp';
-import { Readable } from 'node:stream';
+import { randomBytes } from 'node:crypto';
 import type { HostConfig, PodcastHostProvider } from './types.js';
 
 async function connect(config: HostConfig, secrets: HostConfig) {
@@ -47,29 +47,33 @@ export const ftpProvider: PodcastHostProvider = {
     },
   ],
 
+  /**
+   * Prüft nur über die Steuerverbindung (Port 21): Anmeldung, Verzeichnis und Schreibrechte
+   * (Testordner anlegen und wieder löschen). Eine Datenverbindung (passive Ports) wird bewusst nicht
+   * geöffnet – das Webhosting von kahal.tools lässt sie oft nicht zu, der Worker schon.
+   */
   async test(config, secrets) {
     const client = await connect(config, secrets);
     try {
-      const list = await client.list();
-      return `Verbindung erfolgreich (${list.length} Einträge im Verzeichnis)`;
+      const dir = await client.pwd();
+      const probe = `.kahal-test-${randomBytes(4).toString('hex')}`;
+      try {
+        await client.send(`MKD ${probe}`);
+        await client.send(`RMD ${probe}`);
+      } catch (err) {
+        throw new Error(`Anmeldung ok, aber keine Schreibrechte im Verzeichnis ${dir}: ${err instanceof Error ? err.message : err}`);
+      }
+      return `Anmeldung und Schreibrechte ok (Verzeichnis ${dir}). Die eigentliche Dateiübertragung macht der Worker.`;
     } finally {
       client.close();
     }
   },
 
+  /** Löschen braucht nur die Steuerverbindung (DELE) und funktioniert deshalb auch vom Webhosting aus */
   async deleteFile(config, secrets, fileName) {
     const client = await connect(config, secrets);
     try {
       await client.remove(fileName, true);
-    } finally {
-      client.close();
-    }
-  },
-
-  async uploadText(config, secrets, fileName, content) {
-    const client = await connect(config, secrets);
-    try {
-      await client.uploadFrom(Readable.from([Buffer.from(content, 'utf8')]), fileName);
     } finally {
       client.close();
     }
