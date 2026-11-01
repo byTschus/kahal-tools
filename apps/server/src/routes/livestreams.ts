@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { requirePerm, tid } from '../auth/middleware.js';
 import { prisma } from '../db.js';
@@ -46,6 +46,8 @@ livestreamsRouter.post('/api/livestreams/prepare', requirePerm('livestream', 'cr
     scheduledStart: start.startsAt,
     startSource: start.source,
     privacy: settings.privacy,
+    playlistId: settings.playlistId || null,
+    thumbnailUrl: render(settings.thumbnailTemplate, vars, opts).trim() || null,
   });
 });
 
@@ -56,7 +58,20 @@ const streamSchema = z.object({
   description: z.string().max(5000).default(''),
   scheduledStart: z.string().datetime({ offset: true }),
   privacy: z.enum(['public', 'unlisted', 'private']),
+  /** Stream zu dieser Playlist hinzufügen */
+  playlistId: z.string().nullable().optional(),
 });
+
+/** Fügt den Stream einer Playlist hinzu; ein Fehler verhindert das Speichern nicht, sondern wird gemeldet */
+async function addToPlaylist(client: Awaited<ReturnType<typeof requireStreaming>>['client'], videoId: string, playlistId?: string | null) {
+  if (!playlistId) return undefined;
+  try {
+    await client.addToPlaylist(videoId, playlistId);
+    return undefined;
+  } catch (err) {
+    return `Der Stream konnte nicht zur Playlist hinzugefügt werden: ${err instanceof Error ? err.message : err}`;
+  }
+}
 
 livestreamsRouter.post('/api/livestreams', requirePerm('livestream', 'create'), async (req, res) => {
   const body = streamSchema.parse(req.body);
@@ -72,7 +87,6 @@ livestreamsRouter.post('/api/livestreams', requirePerm('livestream', 'create'), 
     scheduledStart: new Date(body.scheduledStart).toISOString(),
     privacy: body.privacy,
     streamKeyId: settings.streamKeyId || undefined,
-    playlistId: settings.playlistId || undefined,
     autoStart: settings.autoStart,
     autoStop: settings.autoStop,
   });
@@ -89,7 +103,8 @@ livestreamsRouter.post('/api/livestreams', requirePerm('livestream', 'create'), 
       createdById: req.user!.id,
     },
   });
-  res.status(201).json(broadcast);
+  const warning = await addToPlaylist(client, broadcast.id, body.playlistId);
+  res.status(201).json({ ...broadcast, warning });
 });
 
 livestreamsRouter.patch('/api/livestreams/:id', requirePerm('livestream', 'edit'), async (req, res) => {
@@ -117,7 +132,64 @@ livestreamsRouter.patch('/api/livestreams/:id', requirePerm('livestream', 'edit'
     create: { tenantId, provider: provider.key, externalId: broadcast.id, ...data },
     update: data,
   });
-  res.json(broadcast);
+  const warning = await addToPlaylist(client, broadcast.id, body.playlistId);
+  res.json({ ...broadcast, warning });
+});
+
+// ----- Playlists -----
+
+livestreamsRouter.get('/api/livestreams/playlists', requirePerm('livestream', 'create'), async (req, res) => {
+  const { client } = await requireStreaming(tid(req));
+  res.json(await client.listPlaylists());
+});
+
+const playlistSchema = z.object({ name: z.string().trim().min(1, 'Name fehlt').max(150), privacy: z.enum(['public', 'unlisted', 'private']).default('public') });
+
+livestreamsRouter.post('/api/livestreams/playlists', requirePerm('livestream', 'create'), async (req, res) => {
+  const body = playlistSchema.parse(req.body);
+  const { client } = await requireStreaming(tid(req));
+  res.status(201).json(await client.createPlaylist(body.name, body.privacy));
+});
+
+// ----- Thumbnail -----
+
+const MAX_THUMBNAIL = 2 * 1024 * 1024;
+
+/** Bild (JPEG/PNG, max. 2 MB – YouTube-Limit) als Thumbnail setzen. Der Browser verkleinert vorher auf 1280×720. */
+livestreamsRouter.put(
+  '/api/livestreams/:id/thumbnail',
+  requirePerm('livestream', 'edit'),
+  express.raw({ type: ['image/jpeg', 'image/png'], limit: '3mb' }),
+  async (req, res) => {
+    const image = req.body as Buffer;
+    if (!Buffer.isBuffer(image) || !image.length) throw new HttpError(400, 'Bitte ein JPEG- oder PNG-Bild hochladen');
+    if (image.length > MAX_THUMBNAIL) throw new HttpError(400, 'Das Bild ist grösser als 2 MB');
+    const { client } = await requireStreaming(tid(req));
+    await client.setThumbnail(String(req.params.id), image, String(req.headers['content-type']));
+    res.json({ ok: true });
+  },
+);
+
+/**
+ * Lädt ein Bild (z.B. Serienbild aus dem Plan) über den Server, damit der Browser es zuschneiden kann
+ * (fremde Bilder dürfen ohne CORS nicht in ein Canvas gelesen werden).
+ */
+livestreamsRouter.get('/api/livestreams/image', requirePerm('livestream', 'create'), async (req, res) => {
+  let url: URL;
+  try {
+    url = new URL(String(req.query.url ?? ''));
+  } catch {
+    throw new HttpError(400, 'Ungültige Bild-Adresse');
+  }
+  if (!/^https?:$/.test(url.protocol)) throw new HttpError(400, 'Ungültige Bild-Adresse');
+  const upstream = await fetch(url, { signal: AbortSignal.timeout(20_000) }).catch(() => null);
+  const type = upstream?.headers.get('content-type') ?? '';
+  if (!upstream?.ok || !type.startsWith('image/')) throw new HttpError(400, 'Das Bild konnte nicht geladen werden');
+  const data = Buffer.from(await upstream.arrayBuffer());
+  if (data.length > 20 * 1024 * 1024) throw new HttpError(400, 'Das Bild ist zu gross');
+  res.setHeader('Content-Type', type);
+  res.setHeader('Cache-Control', 'private, max-age=600');
+  res.send(data);
 });
 
 const linkSchema = z.object({ eventId: z.string().nullable(), eventTitle: z.string().nullable().optional() });

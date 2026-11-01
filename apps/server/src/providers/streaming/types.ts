@@ -38,7 +38,6 @@ export interface BroadcastInput {
   scheduledStart: string;
   privacy: Privacy;
   streamKeyId?: string;
-  playlistId?: string;
   autoStart?: boolean;
   autoStop?: boolean;
 }
@@ -54,6 +53,10 @@ export interface StreamingClient {
   getAccount(): Promise<{ id: string; name: string; avatarUrl?: string }>;
   listStreamKeys(): Promise<{ id: string; name: string }[]>;
   listPlaylists(): Promise<{ id: string; name: string }[]>;
+  createPlaylist(name: string, privacy: Privacy): Promise<{ id: string; name: string }>;
+  addToPlaylist(videoId: string, playlistId: string): Promise<void>;
+  /** Eigenes Vorschaubild (JPEG/PNG, max. 2 MB) */
+  setThumbnail(videoId: string, image: Buffer, contentType: string): Promise<void>;
   listBroadcasts(status: 'upcoming' | 'active' | 'completed' | 'all', pageToken?: string): Promise<{ items: Broadcast[]; nextPageToken?: string }>;
   getBroadcast(id: string): Promise<Broadcast | null>;
   createBroadcast(input: BroadcastInput): Promise<Broadcast>;

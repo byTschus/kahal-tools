@@ -17,7 +17,10 @@ export const settingsSchemas = {
     startOffsetMinutes: z.coerce.number().default(0),
     privacy: z.enum(['public', 'unlisted', 'private']).default('public'),
     streamKeyId: z.string().default(''),
+    /** Vorauswahl der Playlist beim Erstellen (kann pro Stream geändert werden) */
     playlistId: z.string().default(''),
+    /** Bild-URL als Vorschlag für das Thumbnail, z.B. das Serienbild aus Planning Center */
+    thumbnailTemplate: z.string().default('{{series.artwork}}'),
     autoStart: z.boolean().default(true),
     autoStop: z.boolean().default(true),
   }),

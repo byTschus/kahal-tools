@@ -1,11 +1,12 @@
 import { fetchJson, HttpError } from '../../lib/http.js';
-import type { Broadcast, BroadcastInput, BroadcastStatus, OAuthAppCreds, StreamingClient, StreamingProvider, StreamingSecrets, VideoStats } from './types.js';
+import type { Broadcast, BroadcastInput, BroadcastStatus, OAuthAppCreds, Privacy, StreamingClient, StreamingProvider, StreamingSecrets, VideoStats } from './types.js';
 
 /**
  * YouTube Data API v3 (https://developers.google.com/youtube/v3/live)
  * Kontingent: 10'000 Einheiten/Tag pro Google-Projekt. list = 1, insert/update = 50.
  */
 const API = 'https://www.googleapis.com/youtube/v3';
+const UPLOAD_API = 'https://www.googleapis.com/upload/youtube/v3';
 const SCOPE = 'https://www.googleapis.com/auth/youtube';
 
 export const youtubeProvider: StreamingProvider = {
@@ -146,8 +147,39 @@ class YouTubeClient implements StreamingClient {
   }
 
   async listPlaylists() {
-    const res = await this.call('GET', 'playlists', { part: 'snippet', mine: 'true', maxResults: '50' });
-    return (res.items ?? []).map((p: any) => ({ id: p.id, name: p.snippet.title }));
+    const out: { id: string; name: string }[] = [];
+    let pageToken: string | undefined;
+    do {
+      const res = await this.call('GET', 'playlists', { part: 'snippet', mine: 'true', maxResults: '50', ...(pageToken ? { pageToken } : {}) });
+      out.push(...(res.items ?? []).map((p: any) => ({ id: p.id, name: p.snippet.title })));
+      pageToken = res.nextPageToken;
+    } while (pageToken && out.length < 500);
+    return out.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  }
+
+  async createPlaylist(name: string, privacy: Privacy) {
+    const res = await this.call('POST', 'playlists', { part: 'snippet,status' }, { snippet: { title: clean(name, 150) }, status: { privacyStatus: privacy } });
+    return { id: res.id, name: res.snippet?.title ?? name };
+  }
+
+  async addToPlaylist(videoId: string, playlistId: string) {
+    await this.call('POST', 'playlistItems', { part: 'snippet' }, { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } });
+  }
+
+  async setThumbnail(videoId: string, image: Buffer, contentType: string) {
+    const res = await fetch(`${UPLOAD_API}/thumbnails/set?${new URLSearchParams({ videoId, uploadType: 'media' })}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await this.token()}`, 'Content-Type': contentType },
+      body: new Uint8Array(image),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const reason = body?.error?.errors?.[0]?.reason;
+      if (res.status === 403 || reason === 'forbidden') {
+        throw new HttpError(400, 'YouTube erlaubt für diesen Kanal keine eigenen Thumbnails. Der Kanal muss dafür bestätigt sein: youtube.com/verify');
+      }
+      throw new HttpError(502, `YouTube (Thumbnail): ${body?.error?.message ?? res.statusText}`);
+    }
   }
 
   async listBroadcasts(status: 'upcoming' | 'active' | 'completed' | 'all', pageToken?: string) {
@@ -183,11 +215,6 @@ class YouTubeClient implements StreamingClient {
     });
     if (input.streamKeyId) {
       await this.call('POST', 'liveBroadcasts/bind', { id: created.id, part: 'id,contentDetails', streamId: input.streamKeyId });
-    }
-    if (input.playlistId) {
-      await this.call('POST', 'playlistItems', { part: 'snippet' }, {
-        snippet: { playlistId: input.playlistId, resourceId: { kind: 'youtube#video', videoId: created.id } },
-      }).catch((err) => console.warn('Playlist konnte nicht gesetzt werden:', err.message));
     }
     return mapBroadcast(created);
   }

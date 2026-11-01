@@ -3,10 +3,12 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
 import { PlanLink } from '../components/PlanLink';
+import { PlaylistSelect, ThumbnailPicker, type ThumbnailChoice } from '../components/StreamExtras';
 import { Alert, Badge, Button, Card, ConfirmButton, Empty, Field, Modal, PageHeader, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
 import { useCan } from '../lib/auth';
 import { fmtDate, fmtNumber, fromLocalInput, toLocalInput } from '../lib/format';
+import { toThumbnail } from '../lib/image';
 import type { Broadcast, PlanningEvent } from '../lib/types';
 
 type Status = 'upcoming' | 'active' | 'completed';
@@ -25,11 +27,11 @@ export function LivestreamPage() {
   const { data, loading, error, reload } = useApi<{ items: Broadcast[] }>(`/api/livestreams?status=${status}`);
   const [editing, setEditing] = useState<Broadcast | 'new' | null>(null);
   const [linking, setLinking] = useState<Broadcast | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ kind: 'success' | 'warning'; text: string } | null>(null);
 
   const remove = async (b: Broadcast) => {
     await api.del(`/api/livestreams/${b.id}`);
-    setMessage(`„${b.title}“ wurde gelöscht.`);
+    setMessage({ kind: 'success', text: `„${b.title}“ wurde gelöscht.` });
     void reload();
   };
 
@@ -42,7 +44,7 @@ export function LivestreamPage() {
           </Button>
         )}
       </PageHeader>
-      <Alert kind="success">{message}</Alert>
+      {message && <Alert kind={message.kind}>{message.text}</Alert>}
       <Card>
         <Tabs
           tabs={[
@@ -136,7 +138,7 @@ export function LivestreamPage() {
           onClose={() => setLinking(null)}
           onSaved={() => {
             setLinking(null);
-            setMessage('Plan-Verknüpfung wurde gespeichert.');
+            setMessage({ kind: 'success', text: 'Plan-Verknüpfung wurde gespeichert.' });
             void reload();
           }}
         />
@@ -148,6 +150,8 @@ export function LivestreamPage() {
           onSaved={(msg) => {
             setEditing(null);
             setMessage(msg);
+            // YouTube braucht einen Moment, bis ein neues Thumbnail in der Liste erscheint
+            setTimeout(() => void reload(), 4000);
             void reload();
           }}
         />
@@ -162,9 +166,19 @@ interface Prepared {
   scheduledStart: string | null;
   startSource: string;
   privacy: Broadcast['privacy'];
+  playlistId: string | null;
+  thumbnailUrl: string | null;
 }
 
-function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast | null; onClose: () => void; onSaved: (msg: string) => void }) {
+function LivestreamModal({
+  broadcast,
+  onClose,
+  onSaved,
+}: {
+  broadcast: Broadcast | null;
+  onClose: () => void;
+  onSaved: (msg: { kind: 'success' | 'warning'; text: string }) => void;
+}) {
   const [event, setEvent] = useState<PlanningEvent | null>(null);
   const [step, setStep] = useState<'event' | 'form'>(broadcast ? 'form' : 'event');
   const [freitext, setFreitext] = useState('');
@@ -173,6 +187,9 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
   const [start, setStart] = useState(toLocalInput(broadcast?.scheduledStart));
   const [privacy, setPrivacy] = useState<Broadcast['privacy']>(broadcast?.privacy ?? 'public');
   const [startSource, setStartSource] = useState<string | null>(null);
+  const [playlistId, setPlaylistId] = useState('');
+  const [planImage, setPlanImage] = useState<string | null>(null);
+  const [thumbnail, setThumbnail] = useState<ThumbnailChoice>({ kind: 'none' });
   const prep = useAction();
   const save = useAction();
 
@@ -181,10 +198,13 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
     if (!res) return;
     setTitle(res.title);
     setDescription(res.description);
+    setPlanImage(res.thumbnailUrl);
     if (!broadcast) {
       setStart(toLocalInput(res.scheduledStart));
       setPrivacy(res.privacy);
       setStartSource(res.startSource);
+      setPlaylistId(res.playlistId ?? '');
+      setThumbnail(res.thumbnailUrl ? { kind: 'url', url: res.thumbnailUrl } : { kind: 'none' });
     }
     setStep('form');
   };
@@ -195,10 +215,25 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
       description,
       scheduledStart: fromLocalInput(start),
       privacy,
+      playlistId: playlistId || null,
       ...(event ? { eventId: event.id, eventTitle: event.title } : {}),
     };
-    const ok = await save.run(() => (broadcast ? api.patch(`/api/livestreams/${broadcast.id}`, body) : api.post('/api/livestreams', body)));
-    if (ok) onSaved(broadcast ? 'Livestream wurde aktualisiert.' : 'Livestream wurde auf YouTube erstellt.');
+    const saved = await save.run(() =>
+      broadcast ? api.patch<Broadcast & { warning?: string }>(`/api/livestreams/${broadcast.id}`, body) : api.post<Broadcast & { warning?: string }>('/api/livestreams', body),
+    );
+    if (!saved) return;
+    const warnings = saved.warning ? [saved.warning] : [];
+    // Thumbnail erst nach dem Speichern setzen; ein Fehler macht den Stream nicht ungültig
+    if (thumbnail.kind !== 'none') {
+      try {
+        const image = await toThumbnail(thumbnail.kind === 'file' ? thumbnail.file : thumbnail.url);
+        await api.upload(`/api/livestreams/${saved.id}/thumbnail`, image, 'image/jpeg');
+      } catch (err) {
+        warnings.push(`Thumbnail konnte nicht gesetzt werden: ${(err as Error).message}`);
+      }
+    }
+    const done = broadcast ? 'Livestream wurde aktualisiert.' : 'Livestream wurde auf YouTube erstellt.';
+    onSaved(warnings.length ? { kind: 'warning', text: `${done} ${warnings.join(' ')}` } : { kind: 'success', text: done });
   };
 
   return (
@@ -276,6 +311,12 @@ function LivestreamModal({ broadcast, onClose, onSaved }: { broadcast: Broadcast
               </select>
             </Field>
           </div>
+          <Field label={broadcast ? 'Zu Playlist hinzufügen' : 'Playlist'}>
+            <PlaylistSelect value={playlistId} onChange={setPlaylistId} emptyLabel={broadcast ? 'Keine weitere Playlist' : 'Keine Playlist'} />
+          </Field>
+          <Field label="Thumbnail">
+            <ThumbnailPicker planImageUrl={planImage} value={thumbnail} onChange={setThumbnail} currentUrl={broadcast?.thumbnailUrl} />
+          </Field>
         </>
       )}
     </Modal>

@@ -14,6 +14,7 @@ interface LivestreamSettingsData {
   privacy: 'public' | 'unlisted' | 'private';
   streamKeyId: string;
   playlistId: string;
+  thumbnailTemplate: string;
   autoStart: boolean;
   autoStop: boolean;
 }
@@ -112,6 +113,13 @@ export function LivestreamSettings() {
             {sample.events.length > 0 && <SamplePlanSelect sample={sample} />}
             <TemplateField label="Titel" value={s.form.titleTemplate} onChange={(v) => s.set('titleTemplate', v)} sample={sample} hint="Max. 100 Zeichen bei YouTube" />
             <TemplateField label="Beschreibung" multiline value={s.form.descriptionTemplate} onChange={(v) => s.set('descriptionTemplate', v)} sample={sample} />
+            <TemplateField
+              label="Thumbnail-Vorschlag (Bild-URL)"
+              value={s.form.thumbnailTemplate}
+              onChange={(v) => s.set('thumbnailTemplate', v)}
+              sample={sample}
+              hint="z.B. {{series.artwork}} für das Serienbild aus Planning Center. Beim Erstellen kann auch ein eigenes Bild hochgeladen werden."
+            />
             <div className="grid grid-2">
               <Field
                 label="Startzeit aus Plan-Item"
@@ -142,7 +150,7 @@ export function LivestreamSettings() {
                   ))}
                 </select>
               </Field>
-              <Field label="Playlist" hint="Neue Livestreams automatisch zu dieser Playlist hinzufügen">
+              <Field label="Playlist (Vorauswahl)" hint="Wird beim Erstellen vorgeschlagen und kann pro Livestream geändert werden">
                 <select value={s.form.playlistId} onChange={(e) => s.set('playlistId', e.target.value)} disabled={!options}>
                   <option value="">– keine –</option>
                   {options?.playlists.map((p) => (

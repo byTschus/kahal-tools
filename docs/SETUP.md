@@ -318,6 +318,7 @@ Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker starte
 1. <https://tools.deine-domain.ch> öffnen → **Neue Gemeinde einrichten** (siehe [Abschnitt 3](#3-planning-center-oauth-app-pro-gemeinde)). Du bist als erste Person deiner Gemeinde automatisch **Administrator**.
 2. **Einstellungen → Planungstool:** Login-Link der Gemeinde kopieren und weitergeben, Service Types auswählen.
 3. **Einstellungen → Livestream:** Google-Zugangsdaten eintragen ([Abschnitt 4](#4-google--youtube-api-pro-gemeinde)), dann **Mit YouTube verbinden**. Danach Vorlagen, Startzeit-Item (z.B. „Livestream“), Streamschlüssel und Playlist einstellen.
+   * Beim Erstellen eines Livestreams lassen sich eine **Playlist** wählen (oder direkt eine neue erstellen) und ein **Thumbnail** setzen: das Bild aus dem Plan (Vorlage „Thumbnail-Vorschlag“, z.B. `{{series.artwork}}`) oder ein eigenes Bild. Eigene Thumbnails erlaubt YouTube nur für bestätigte Kanäle: einmalig unter <https://www.youtube.com/verify> per SMS bestätigen.
    * Der **Streamschlüssel** sorgt dafür, dass OBS/der Encoder immer an denselben Schlüssel sendet; neue Livestreams werden automatisch damit verbunden.
 4. **Einstellungen → Podcast:** FTP-Daten eintragen → **Verbindung testen** → Vorlagen und Feed-Angaben ausfüllen.
 5. **Einstellungen → Besucherzähler:** Orte anlegen (Saal EG, Saal OG, …), Livestream-Zählung einstellen.
