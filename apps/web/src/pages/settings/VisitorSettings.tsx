@@ -2,12 +2,15 @@ import { ArrowDown, ArrowUp, MapPin, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Spinner , Saved } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
+import { useCan } from '../../lib/auth';
 import type { Integrations, VisitorLocation } from '../../lib/types';
+import { VisitorImportCard } from './ImportCards';
 import { useSettings } from './useSettings';
 
 export function VisitorSettings() {
   const { data: locations, loading, reload } = useApi<VisitorLocation[]>('/api/visitors/locations');
   const { data: integrations } = useApi<Integrations>('/api/integrations');
+  const can = useCan();
   const s = useSettings<{ livestreamEnabled: boolean; livestreamMode: 'concurrent' | 'views' }>('visitors');
   const [name, setName] = useState('');
   const add = useAction();
@@ -113,6 +116,7 @@ export function VisitorSettings() {
           </div>
         )}
       </Card>
+      {can('visitors', 'create') && <VisitorImportCard />}
     </>
   );
 }

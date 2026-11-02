@@ -1,9 +1,8 @@
-import { Check, Code, Copy, Download, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
+import { Check, Code, Copy, Mic, Pencil, Plus, RotateCcw, Rss, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PlanLink, type PlanRef } from '../components/PlanLink';
-import { MATCH_LABEL, MatchingInfo, PlanMatchBadge, type MatchedPlan, type MatchingSummary } from '../components/PlanMatch';
-import { Alert, Badge, Button, Card, Checkbox, ConfirmButton, Empty, Field, Modal, PageHeader, Progress, Spinner, Tabs } from '../components/ui';
+import { Alert, Badge, Button, Card, ConfirmButton, Empty, Field, Modal, PageHeader, Progress, Spinner, Tabs } from '../components/ui';
 import { api, useAction, useApi } from '../lib/api';
 import { useCan, useMe } from '../lib/auth';
 import { fmtBytes, fmtDate, fmtDuration, fromLocalInput, toLocalInput } from '../lib/format';
@@ -23,7 +22,6 @@ export function PodcastPage() {
   const { data, loading, error, reload } = useApi<Podcast[]>('/api/podcasts');
   const { data: integrations } = useApi<Integrations>('/api/integrations');
   const [editing, setEditing] = useState<Podcast | null>(null);
-  const [importing, setImporting] = useState(false);
   const [embedding, setEmbedding] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'warning'; text: string } | null>(null);
 
@@ -52,11 +50,6 @@ export function PodcastPage() {
         <Button icon={Code} onClick={() => setEmbedding(true)}>
           Einbetten
         </Button>
-        {can('podcast', 'create') && (
-          <Button icon={Download} onClick={() => setImporting(true)}>
-            Feed importieren
-          </Button>
-        )}
         {can('podcast', 'create') && (
           <Link to="/podcast/new" className="btn primary">
             <Plus size={16} /> Neuer Podcast
@@ -168,16 +161,6 @@ export function PodcastPage() {
           }}
         />
       )}
-      {importing && (
-        <FeedImportModal
-          onClose={() => setImporting(false)}
-          onDone={(text) => {
-            setImporting(false);
-            setMessage({ kind: 'success', text });
-            void reload();
-          }}
-        />
-      )}
       {embedding && <EmbedModal onClose={() => setEmbedding(false)} />}
     </>
   );
@@ -261,112 +244,6 @@ function PodcastEditModal({ podcast, onClose, onSaved }: { podcast: Podcast; onC
         </Field>
       )}
       <small>Hinweis: Änderungen wirken sich auf den Feed aus. Die ID3-Tags in der bereits hochgeladenen MP3-Datei bleiben unverändert.</small>
-    </Modal>
-  );
-}
-
-interface FeedPreview {
-  channel: { title: string; description: string; author: string; imageUrl: string };
-  total: number;
-  new: number;
-  matching?: MatchingSummary;
-  episodes: { title: string; publishedAt: string | null; durationSec: number | null; isNew: boolean; plan: MatchedPlan | null; ambiguous: boolean }[];
-}
-
-function FeedImportModal({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
-  const [url, setUrl] = useState('');
-  const [adoptChannel, setAdoptChannel] = useState(true);
-  const [matchPlans, setMatchPlans] = useState(true);
-  const [preview, setPreview] = useState<FeedPreview | null>(null);
-  const load = useAction();
-  const run = useAction();
-
-  const loadPreview = async (match = matchPlans) => {
-    setPreview(null);
-    const res = await load.run(() => api.post<FeedPreview>('/api/podcasts/import-feed', { url, matchPlans: match }));
-    if (res) setPreview(res);
-  };
-
-  const commit = async () => {
-    const res = await run.run(() =>
-      api.post<{ imported: number; skipped: number; linked: number; matchError?: string }>('/api/podcasts/import-feed', { url, commit: true, adoptChannel, matchPlans }),
-    );
-    if (res)
-      onDone(
-        `${res.imported} Episoden importiert${res.linked ? `, ${res.linked} davon einem Plan zugeordnet` : ''}${res.skipped ? `, ${res.skipped} bereits vorhanden` : ''}.${res.matchError ? ` ${res.matchError}` : ''}`,
-      );
-  };
-
-  return (
-    <Modal
-      title="Bestehenden Podcast-Feed importieren"
-      wide
-      onClose={onClose}
-      footer={
-        preview ? (
-          <Button variant="primary" busy={run.busy} disabled={!preview.new} onClick={commit}>
-            {preview.new} Episoden importieren
-          </Button>
-        ) : null
-      }
-    >
-      <p className="muted">
-        Übernimmt die Episoden eines bestehenden RSS-Feeds. Die Audiodateien bleiben beim bisherigen Anbieter und werden verlinkt. Die Episoden können anhand des
-        Veröffentlichungsdatums automatisch einem Plan zugeordnet werden, sonst verknüpfst du den Plan später beim Bearbeiten.
-      </p>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
-        <input type="url" placeholder="https://… /feed.xml" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && url && loadPreview()} />
-        <Button busy={load.busy} disabled={!url.trim()} onClick={() => loadPreview()}>
-          Feed laden
-        </Button>
-      </div>
-      <Checkbox
-        checked={matchPlans}
-        onChange={(v) => {
-          setMatchPlans(v);
-          if (preview) void loadPreview(v);
-        }}
-        label={MATCH_LABEL}
-      />
-      <Alert>{load.error ?? run.error}</Alert>
-      {load.busy && matchPlans && <Spinner label="Feed und Pläne werden geladen …" />}
-      {preview && (
-        <div className="stack">
-          <div className="row" style={{ flexWrap: 'nowrap' }}>
-            {preview.channel.imageUrl && <img src={preview.channel.imageUrl} alt="" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}
-            <div>
-              <div className="cell-title">{preview.channel.title || 'Ohne Titel'}</div>
-              <div className="cell-sub">
-                {preview.total} Episoden, davon {preview.new} neu
-              </div>
-            </div>
-          </div>
-          {preview.matching && preview.new > 0 && <MatchingInfo matching={preview.matching} total={preview.new} />}
-          <div className="scroll-list" style={{ maxHeight: 260 }}>
-            {preview.episodes.map((e, i) => (
-              <div key={i} className="list-item" style={{ cursor: 'default', opacity: e.isNew ? 1 : 0.55 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="cell-title">{e.title}</div>
-                  <div className="cell-sub">
-                    {fmtDate(e.publishedAt, false)} {e.durationSec ? `· ${fmtDuration(e.durationSec)}` : ''}
-                  </div>
-                </div>
-                {!e.isNew ? (
-                  <Badge plain>bereits vorhanden</Badge>
-                ) : (
-                  preview.matching &&
-                  !preview.matching.error && (
-                    <div style={{ maxWidth: '45%' }}>
-                      <PlanMatchBadge plan={e.plan} ambiguous={e.ambiguous} />
-                    </div>
-                  )
-                )}
-              </div>
-            ))}
-          </div>
-          <Checkbox checked={adoptChannel} onChange={setAdoptChannel} label="Leere Feed-Angaben (Titel, Beschreibung, Autor, Bild …) aus diesem Feed übernehmen" />
-        </div>
-      )}
     </Modal>
   );
 }

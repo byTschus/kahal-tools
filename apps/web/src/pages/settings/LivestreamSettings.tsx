@@ -3,7 +3,9 @@ import { OAuthAppCard, type OAuthAppStatus } from '../../components/OAuthAppCard
 import { SamplePlanSelect, TemplateField, useSamplePlan } from '../../components/TemplateField';
 import { Alert, Avatar, Button, Card, Checkbox, ConfirmButton, Field, Spinner , Saved } from '../../components/ui';
 import { api, useApi } from '../../lib/api';
+import { useCan } from '../../lib/auth';
 import type { Integrations } from '../../lib/types';
+import { LivestreamPlanMatchCard } from './ImportCards';
 import { useSettings } from './useSettings';
 
 interface LivestreamSettingsData {
@@ -23,6 +25,7 @@ export function LivestreamSettings() {
   const [params] = useSearchParams();
   const { data: integrations, reload } = useApi<Integrations>('/api/integrations');
   const connected = integrations?.streaming;
+  const can = useCan();
   const { data: options } = useApi<{ streamKeys: { id: string; name: string }[]; playlists: { id: string; name: string }[] }>(
     connected ? '/api/integrations/streaming/options' : null,
   );
@@ -174,6 +177,7 @@ export function LivestreamSettings() {
           </div>
         </Card>
       )}
+      {connected && can('livestream', 'edit') && <LivestreamPlanMatchCard />}
     </>
   );
 }

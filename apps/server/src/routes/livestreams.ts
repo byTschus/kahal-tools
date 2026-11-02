@@ -5,7 +5,9 @@ import { prisma } from '../db.js';
 import { HttpError } from '../lib/http.js';
 import { render } from '../lib/template.js';
 import { requireStreaming } from '../services/integrations.js';
+import type { Broadcast } from '../providers/streaming/types.js';
 import { assertPlanFree } from '../services/planLinks.js';
+import { matchPlans } from '../services/planMatch.js';
 import { planningClientFor, resolveStartTime } from '../services/planning.js';
 import { getSettings } from '../settings.js';
 
@@ -229,4 +231,79 @@ livestreamsRouter.delete('/api/livestreams/:id', requirePerm('livestream', 'dele
   await client.deleteBroadcast(String(req.params.id));
   await prisma.livestream.deleteMany({ where: { tenantId, provider: provider.key, externalId: String(req.params.id) } });
   res.json({ ok: true });
+});
+
+const matchSchema = z.object({
+  /** false = nur Vorschau */
+  commit: z.boolean().default(false),
+});
+
+/**
+ * Vergangene Livestreams ohne Plan automatisch einem Plan zuordnen (Startzeit, Titel als Hilfe).
+ * Betrifft v.a. Streams, die nicht über kahal.tools erstellt wurden.
+ */
+livestreamsRouter.post('/api/livestreams/match-plans', requirePerm('livestream', 'edit'), async (req, res) => {
+  const body = matchSchema.parse(req.body);
+  const tenantId = tid(req);
+  const { client, provider } = await requireStreaming(tenantId);
+
+  // Alle vergangenen Streams laden (höchstens 20 Seiten à 50)
+  const broadcasts: Broadcast[] = [];
+  let pageToken: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await client.listBroadcasts('completed', pageToken);
+    broadcasts.push(...page.items);
+    pageToken = page.nextPageToken;
+    if (!pageToken) break;
+  }
+  const local = await prisma.livestream.findMany({ where: { tenantId, provider: provider.key, externalId: { in: broadcasts.map((b) => b.id) } } });
+  const byId = new Map(local.map((l) => [l.externalId, l]));
+  const open = broadcasts.filter((b) => !byId.get(b.id)?.planId && (b.actualStart ?? b.scheduledStart));
+
+  const match = await matchPlans(
+    req.user!,
+    'livestream',
+    open.map((b) => ({ key: b.id, date: new Date((b.actualStart ?? b.scheduledStart)!), hasTime: true, title: b.title })),
+  );
+
+  if (!body.commit) {
+    res.json({
+      total: broadcasts.length,
+      withPlan: broadcasts.length - open.length,
+      open: open.length,
+      matching: { error: match.error, linked: match.matches.size, ambiguous: match.ambiguous.size },
+      rows: open.map((b) => ({
+        id: b.id,
+        title: b.title,
+        date: b.actualStart ?? b.scheduledStart,
+        url: b.url,
+        plan: match.matches.get(b.id) ?? null,
+        ambiguous: match.ambiguous.has(b.id),
+      })),
+    });
+    return;
+  }
+
+  let linked = 0;
+  for (const b of open) {
+    const plan = match.matches.get(b.id);
+    if (!plan) continue;
+    const data = { planId: plan.planId, planTitle: plan.title };
+    const own = byId.get(b.id);
+    if (own) await prisma.livestream.update({ where: { id: own.id }, data });
+    else
+      await prisma.livestream.create({
+        data: {
+          tenantId,
+          provider: provider.key,
+          externalId: b.id,
+          title: b.title.slice(0, 255),
+          scheduledStart: b.scheduledStart ? new Date(b.scheduledStart) : null,
+          status: b.status,
+          ...data,
+        },
+      });
+    linked++;
+  }
+  res.json({ linked, matchError: match.error });
 });

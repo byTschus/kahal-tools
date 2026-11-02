@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { SamplePlanSelect, TemplateField, useSamplePlan } from '../../components/TemplateField';
 import { Alert, Button, Card, Checkbox, ConfirmButton, Field, Spinner , Saved } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
+import { useCan } from '../../lib/auth';
 import type { HostField, Integrations } from '../../lib/types';
 import { useSettings } from './useSettings';
+import { FeedImportCard } from './ImportCards';
 import { WorkerServerCard } from './WorkerServerCard';
 
 interface PodcastSettingsData {
@@ -32,6 +34,7 @@ interface PodcastSettingsData {
 export function PodcastSettings() {
   const s = useSettings<PodcastSettingsData>('podcast');
   const sample = useSamplePlan();
+  const can = useCan();
   const setFeed = (key: keyof PodcastSettingsData['feed'], value: string | boolean) => s.form && s.set('feed', { ...s.form.feed, [key]: value });
 
   return (
@@ -126,6 +129,7 @@ export function PodcastSettings() {
           </Card>
         </>
       )}
+      {can('podcast', 'create') && <FeedImportCard />}
     </>
   );
 }
