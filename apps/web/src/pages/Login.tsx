@@ -6,16 +6,6 @@ import { Alert, Avatar, Button, Spinner } from '../components/ui';
 import { api, useApi } from '../lib/api';
 import type { Me } from '../lib/types';
 
-const LAST_TENANT_KEY = 'kahal.lastTenant';
-
-export function rememberTenant(slug: string) {
-  try {
-    localStorage.setItem(LAST_TENANT_KEY, slug);
-  } catch {
-    /* ignorieren */
-  }
-}
-
 interface Provider {
   key: string;
   label: string;
@@ -65,6 +55,9 @@ function AuthShell({ children, wide }: { children: ReactNode; wide?: boolean }) 
           </div>
           {children}
         </div>
+        <a className="auth-legal" href="/datenschutz">
+          Datenschutz
+        </a>
       </main>
     </div>
   );
@@ -107,7 +100,6 @@ function TenantLogin({ slug }: { slug: string }) {
             <a
               className="btn primary large block"
               href={`/auth/${tenant.provider.key}/login?tenant=${encodeURIComponent(tenant.slug)}`}
-              onClick={() => rememberTenant(tenant.slug)}
             >
               Mit {tenant.provider.label} anmelden <ArrowRight size={16} />
             </a>

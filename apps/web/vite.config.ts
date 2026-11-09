@@ -14,6 +14,8 @@ export default defineConfig({
       '/auth': { target },
       '/feeds': { target },
       '/embed': { target },
+      '/datenschutz': { target },
+      '/privacy': { target },
     },
   },
   build: {

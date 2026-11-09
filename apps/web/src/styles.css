@@ -214,6 +214,14 @@ tr:last-child td { border-bottom: none; }
 tbody tr { transition: background 0.1s; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cell-title { font-weight: 600; color: var(--text); }
+.auth-legal {
+  display: block;
+  margin-top: 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 a.title-link:hover { color: var(--accent-text); }
 .cell-sub { font-size: 0.82rem; color: var(--muted); margin-top: 1px; }
 .actions { display: flex; gap: 6px; justify-content: flex-end; }

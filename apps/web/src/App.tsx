@@ -8,7 +8,7 @@ import { setTimeZone } from './lib/format';
 import type { Me } from './lib/types';
 import { Dashboard } from './pages/Dashboard';
 import { LivestreamPage } from './pages/LivestreamPage';
-import { LoginPage, PendingPage, rememberTenant } from './pages/Login';
+import { LoginPage, PendingPage } from './pages/Login';
 import { PodcastCreatePage } from './pages/PodcastCreatePage';
 import { PodcastPage } from './pages/PodcastPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
@@ -20,10 +20,7 @@ export function App() {
   const { data: me, error, loading, reload } = useApi<Me>(isPublic ? null : '/api/me');
 
   useEffect(() => {
-    if (me) {
-      setTimeZone(me.tenant.timeZone);
-      rememberTenant(me.tenant.slug);
-    }
+    if (me) setTimeZone(me.tenant.timeZone);
   }, [me]);
 
   if (isPublic)

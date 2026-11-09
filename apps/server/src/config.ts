@@ -26,6 +26,13 @@ export const config = {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   },
+  /** Betreiber für die Datenschutzerklärung (/datenschutz) */
+  legal: {
+    name: (process.env.LEGAL_NAME ?? '').trim(),
+    /** Adresse, Zeilen mit "\n" oder "|" trennen */
+    address: (process.env.LEGAL_ADDRESS ?? '').replace(/\s*\|\s*/g, '\n').replace(/\\n/g, '\n').trim(),
+    email: (process.env.LEGAL_EMAIL ?? '').trim(),
+  },
   /** E-Mail-Versand (z.B. Einladungen). Ohne SMTP_HOST werden keine E-Mails verschickt. */
   smtp: {
     host: (process.env.SMTP_HOST ?? '').trim(),

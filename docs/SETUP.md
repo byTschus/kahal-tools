@@ -125,6 +125,7 @@ Die Google-Zugangsdaten werden **einmal vom Betreiber** in der Server-`.env` hin
 2. **APIs & Dienste → Bibliothek** → „**YouTube Data API v3**“ suchen → **Aktivieren**.
 3. **APIs & Dienste → OAuth-Zustimmungsbildschirm** (bzw. „Google Auth Platform“):
    * Nutzertyp **Extern**, App-Name `kahal.tools`, Support-E-Mail, Kontakt-E-Mail.
+   * **Branding:** Startseite `https://tools.deine-domain.ch`, Datenschutzerklärung `https://tools.deine-domain.ch/datenschutz`.
    * **Datenzugriff / Bereiche:** `https://www.googleapis.com/auth/youtube` hinzufügen.
 4. **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID**:
    * Anwendungstyp **Webanwendung**
@@ -213,6 +214,9 @@ PCO_CLIENT_ID=...                  # Planning-Center-App für alle Gemeinden, si
 PCO_CLIENT_SECRET=...
 GOOGLE_CLIENT_ID=...               # Google-App für alle Gemeinden, siehe 4.
 GOOGLE_CLIENT_SECRET=...
+LEGAL_NAME=...                     # Betreiber für die Datenschutzerklärung (/datenschutz)
+LEGAL_ADDRESS=Strasse 1 | 3600 Thun | Schweiz
+LEGAL_EMAIL=...
 ENABLE_MOCK_PLANNING=false
 RUN_SCHEDULER=true
 # Optional: OPENSTACK_* / WORKER_SERVER_* – Worker-Server nur bei Bedarf starten, siehe 6.4
