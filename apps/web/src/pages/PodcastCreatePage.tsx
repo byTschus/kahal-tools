@@ -23,6 +23,8 @@ interface Prepared {
   imageUrl: string;
   planImageUrl: string;
   channelImageUrl: string;
+  /** Vorauswahl aus den Podcast-Einstellungen */
+  defaultImage: 'plan' | 'channel';
 }
 
 type ImageChoice = 'plan' | 'channel' | 'custom';
@@ -109,7 +111,8 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
     if (!res) return;
     setPrepared(res);
     setForm({ title: res.title, speaker: res.speaker, scripture: res.scripture, description: res.description, imageUrl: res.imageUrl });
-    setImageChoice(res.planImageUrl ? 'plan' : res.channelImageUrl ? 'channel' : 'custom');
+    const order: ImageChoice[] = res.defaultImage === 'channel' ? ['channel', 'plan'] : ['plan', 'channel'];
+    setImageChoice(order.find((c) => (c === 'plan' ? res.planImageUrl : res.channelImageUrl)) ?? 'custom');
     if (res.video.durationSec) {
       setDuration((d) => d || res.video.durationSec!);
       setRange((r) => (r[1] ? r : [0, res.video.durationSec!]));

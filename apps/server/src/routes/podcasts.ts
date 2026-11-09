@@ -83,6 +83,7 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     freitext: body.freitext ?? '',
   };
   const opts = { timeZone: req.user!.tenant.timeZone };
+  const planImageUrl = render(settings.imageTemplate, vars, opts).trim();
   const linked = eventId ? await prisma.podcast.findFirst({ where: { tenantId, planId: eventId }, select: { title: true } }) : null;
   res.json({
     eventId,
@@ -95,10 +96,12 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     speaker: render(settings.speakerTemplate, vars, opts).trim(),
     scripture: render(settings.scriptureTemplate, vars, opts).trim(),
     description: render(settings.descriptionTemplate, vars, opts).trim(),
-    imageUrl: render(settings.imageTemplate, vars, opts).trim() || settings.feed.imageUrl,
     /** Zur Auswahl beim Erstellen: Bild aus dem Plan (Vorlage) oder Bild des Podcast-Kanals */
-    planImageUrl: render(settings.imageTemplate, vars, opts).trim(),
+    planImageUrl,
     channelImageUrl: settings.feed.imageUrl,
+    defaultImage: settings.defaultImage,
+    // Vorauswahl gemäss Einstellung, sonst das andere Bild
+    imageUrl: (settings.defaultImage === 'channel' ? settings.feed.imageUrl || planImageUrl : planImageUrl || settings.feed.imageUrl) ?? '',
   });
 });
 

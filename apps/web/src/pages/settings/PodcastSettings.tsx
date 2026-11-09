@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SamplePlanSelect, TemplateField, useSamplePlan } from '../../components/TemplateField';
-import { Alert, Button, Card, Checkbox, ConfirmButton, Field, Spinner , Saved } from '../../components/ui';
+import { Alert, Button, Card, Checkbox, ConfirmButton, Field, Saved, Spinner, Tabs } from '../../components/ui';
 import { api, useAction, useApi } from '../../lib/api';
 import { useCan } from '../../lib/auth';
 import type { HostField, Integrations } from '../../lib/types';
@@ -13,6 +13,7 @@ interface PodcastSettingsData {
   speakerTemplate: string;
   descriptionTemplate: string;
   imageTemplate: string;
+  defaultImage: 'plan' | 'channel';
   scriptureTemplate: string;
   bitrate: '64k' | '96k' | '128k' | '192k';
   mono: boolean;
@@ -62,6 +63,16 @@ export function PodcastSettings() {
                 sample={sample}
                 hint="z.B. {{series.artwork}} für das Serienbild aus Planning Center. Leer = Feed-Bild."
               />
+              <Field label="Vorausgewähltes Bild beim Erstellen" hint="Beim Erstellen lässt sich das Bild jederzeit umstellen. Fehlt das gewählte Bild, wird das andere genommen.">
+                <Tabs
+                  tabs={[
+                    { key: 'plan', label: 'Bild aus Plan' },
+                    { key: 'channel', label: 'Kanalbild' },
+                  ]}
+                  value={s.form.defaultImage}
+                  onChange={(v) => s.set('defaultImage', v)}
+                />
+              </Field>
               <TemplateField
                 label="Bibelstelle"
                 value={s.form.scriptureTemplate}
