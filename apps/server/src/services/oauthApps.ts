@@ -6,8 +6,9 @@ import { HttpError } from '../lib/http.js';
 /**
  * OAuth-App-Zugangsdaten (Client ID + Secret) für Planungstools und Streaming-Plattformen.
  *
- * Jede Gemeinde kann im Webinterface eigene Zugangsdaten hinterlegen. Fehlen diese, werden die
- * globalen Werte aus der .env verwendet (optional – praktisch, wenn ein Betreiber eine App für alle stellt).
+ * Planning Center: Jede Gemeinde kann im Webinterface eigene Zugangsdaten hinterlegen. Fehlen diese,
+ * werden die globalen Werte aus der .env verwendet.
+ * Google / YouTube: nur die globale App aus der .env (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) für alle Gemeinden.
  */
 export interface OAuthAppCreds {
   clientId: string;
@@ -15,6 +16,10 @@ export interface OAuthAppCreds {
 }
 
 export type OAuthAppSource = 'tenant' | 'global';
+
+/** Anbieter, bei denen eine Gemeinde eigene Zugangsdaten eintragen darf */
+const TENANT_APP_PROVIDERS = ['pco'];
+export const allowsTenantApp = (provider: string) => TENANT_APP_PROVIDERS.includes(provider);
 
 export const OAUTH_REDIRECT_PATHS: Record<string, string> = {
   pco: '/auth/pco/callback',
@@ -38,7 +43,7 @@ export async function tenantApp(tenantId: string, provider: string): Promise<OAu
 
 /** Zugangsdaten für einen neuen OAuth-Vorgang: eigene App der Gemeinde, sonst global. */
 export async function resolveApp(tenantId: string | null, provider: string): Promise<(OAuthAppCreds & { source: OAuthAppSource }) | null> {
-  const own = tenantId ? await tenantApp(tenantId, provider) : null;
+  const own = tenantId && allowsTenantApp(provider) ? await tenantApp(tenantId, provider) : null;
   if (own) return { ...own, source: 'tenant' };
   const global = globalApp(provider);
   return global ? { ...global, source: 'global' } : null;
@@ -46,7 +51,8 @@ export async function resolveApp(tenantId: string | null, provider: string): Pro
 
 /**
  * Zugangsdaten zu einem bestehenden Token (für Token-Erneuerung): Es muss genau die App sein,
- * die das Token ausgestellt hat.
+ * die das Token ausgestellt hat. Früher gespeicherte eigene Google-Apps bleiben dafür gültig,
+ * bis die Gemeinde YouTube neu verbindet.
  */
 export async function appForClientId(tenantId: string, provider: string, clientId: string | undefined): Promise<OAuthAppCreds | null> {
   const candidates = [await tenantApp(tenantId, provider), globalApp(provider)].filter(Boolean) as OAuthAppCreds[];
@@ -55,6 +61,7 @@ export async function appForClientId(tenantId: string, provider: string, clientI
 }
 
 export async function saveTenantApp(tenantId: string, provider: string, clientId: string, clientSecret?: string) {
+  if (!allowsTenantApp(provider)) throw new HttpError(400, 'Für diesen Dienst gelten die Zugangsdaten des Betreibers');
   const existing = await prisma.oAuthApp.findUnique({ where: { tenantId_provider: { tenantId, provider } } });
   const secret = clientSecret?.trim() ? encryptJson(clientSecret.trim()) : existing?.clientSecret;
   if (!secret) throw new HttpError(400, 'Client Secret fehlt');
@@ -71,7 +78,7 @@ export async function deleteTenantApp(tenantId: string, provider: string) {
 
 /** Status für die Einstellungen (ohne Secret) */
 export async function appStatus(tenantId: string, provider: string) {
-  const own = await prisma.oAuthApp.findUnique({ where: { tenantId_provider: { tenantId, provider } } });
+  const own = allowsTenantApp(provider) ? await prisma.oAuthApp.findUnique({ where: { tenantId_provider: { tenantId, provider } } }) : null;
   return {
     clientId: own?.clientId ?? '',
     secretSet: Boolean(own),

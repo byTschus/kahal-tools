@@ -5,7 +5,7 @@ Diese Anleitung beschreibt alles, was **von Hand** gemacht werden muss. Reihenfo
 1. [GitHub-Repository anlegen und Code hochladen](#1-github-repository)
 2. [Lokale Entwicklungsumgebung (VS Code + Docker)](#2-lokale-entwicklungsumgebung)
 3. [Planning Center: OAuth-App pro Gemeinde](#3-planning-center-oauth-app-pro-gemeinde)
-4. [Google / YouTube: API-Zugang pro Gemeinde](#4-google--youtube-api-pro-gemeinde)
+4. [Google / YouTube: API-Zugang (einmal für alle Gemeinden)](#4-google--youtube-api-einmal-für-alle-gemeinden)
 5. [Infomaniak: Node.js-Hosting + Datenbank](#5-infomaniak-nodejs-hosting)
 6. [Infomaniak Public Cloud: Podcast-Worker](#6-infomaniak-public-cloud-podcast-worker)
 7. [Erste Schritte im Tool](#7-erste-schritte-im-tool)
@@ -112,9 +112,9 @@ Benötigte Rechte (werden beim Login abgefragt): `people` (Person & Gemeinde erk
 
 Wer kahal.tools benutzt, braucht in Planning Center **Zugriff auf Services** (Pläne, Teams, Items). Zugriff auf **People** ist nicht nötig. Ohne People-Zugriff gilt beim Einladen: Die Personensuche läuft über Services, E-Mail-Adressen sind dort nicht sichtbar und werden im Einladen-Dialog von Hand eingetragen.
 
-## 4. Google / YouTube API pro Gemeinde
+## 4. Google / YouTube API (einmal für alle Gemeinden)
 
-Auch die Google-Zugangsdaten werden pro Gemeinde im Webinterface eingetragen: **Einstellungen → Livestream → Google / YouTube API-Zugangsdaten** (dort steht die Anleitung auch noch einmal).
+Die Google-Zugangsdaten werden **einmal vom Betreiber** in der Server-`.env` hinterlegt und gelten für alle Gemeinden. Gemeinden können keine eigenen eintragen; sie verbinden unter **Einstellungen → Livestream** nur noch ihren YouTube-Kanal.
 
 1. <https://console.cloud.google.com> öffnen → **Projekt auswählen → Neues Projekt** → Name `kahal-tools` → Erstellen.
 2. **APIs & Dienste → Bibliothek** → „**YouTube Data API v3**“ suchen → **Aktivieren**.
@@ -123,18 +123,25 @@ Auch die Google-Zugangsdaten werden pro Gemeinde im Webinterface eingetragen: **
    * **Datenzugriff / Bereiche:** `https://www.googleapis.com/auth/youtube` hinzufügen.
 4. **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID**:
    * Anwendungstyp **Webanwendung**
-   * **Autorisierte Weiterleitungs-URI:** die in kahal.tools angezeigte Adresse, also
+   * **Autorisierte Weiterleitungs-URI:**
      `https://tools.deine-domain.ch/api/integrations/streaming/youtube/callback`
      (lokal zusätzlich `http://localhost:5173/api/integrations/streaming/youtube/callback`)
-5. **Client-ID** und **Clientschlüssel** in kahal.tools eintragen → **Zugangsdaten speichern** → **Mit YouTube verbinden** (mit dem Google-Konto, das den Kanal verwaltet).
+5. **Client-ID** und **Clientschlüssel** in die Server-`.env` eintragen und den Server neu starten:
 
-> ⚠️ **Wichtig – App veröffentlichen:** Solange die Google-App im Status „Testing“ ist, laufen die Tokens **nach 7 Tagen ab** und YouTube muss neu verbunden werden. Unter **Zielgruppe → App veröffentlichen** auf „In Produktion“ stellen. Ohne Google-Verifizierung erscheint beim Verbinden ein Warnhinweis („Google hat diese App nicht überprüft“) → **Erweitert → Weiter zu kahal.tools**. Für den Eigengebrauch einer Gemeinde ist das in Ordnung.
+   ```
+   GOOGLE_CLIENT_ID=…apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=…
+   ```
 
-> **Kontingent:** 10'000 Einheiten pro Tag und Google-Projekt (Livestream erstellen ≈ 50–100, Liste abrufen = 1). Da jede Gemeinde ihr eigenes Google-Projekt hat, teilen sich die Gemeinden das Kontingent nicht.
+6. Jede Gemeinde: **Einstellungen → Livestream → Mit YouTube verbinden** (mit dem Google-Konto, das den Kanal verwaltet).
 
-> **Optional – globale App:** `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in der Server-`.env` gelten für alle Gemeinden ohne eigene Zugangsdaten.
+> ⚠️ **Wichtig – App veröffentlichen:** Solange die Google-App im Status „Testing“ ist, laufen die Tokens **nach 7 Tagen ab** und YouTube muss neu verbunden werden. Unter **Zielgruppe → App veröffentlichen** auf „In Produktion“ stellen. Ohne Google-Verifizierung erscheint beim Verbinden ein Warnhinweis („Google hat diese App nicht überprüft“) → **Erweitert → Weiter zu kahal.tools**, und es können sich insgesamt höchstens 100 Google-Konten verbinden. Bei vielen Gemeinden die App von Google prüfen lassen (Datenschutzerklärung auf der eigenen Domain, kurzes Demo-Video).
 
-> Werden Zugangsdaten geändert, müssen sich Benutzer (PCO) einmal neu anmelden bzw. YouTube neu verbunden werden.
+> **Kontingent:** 10'000 Einheiten pro Tag für alle Gemeinden zusammen (Livestream erstellen ≈ 50–100, Liste abrufen = 1). Reicht es nicht mehr, in der Google Cloud Console eine Erhöhung beantragen.
+
+> **Umstellung:** Gemeinden, die früher eigene Google-Zugangsdaten eingetragen hatten, bleiben vorerst damit verbunden. Mit **Neu verbinden** wechseln sie auf die gemeinsame App.
+
+> Werden Zugangsdaten geändert, müssen sich Benutzer (PCO) einmal neu anmelden bzw. alle Gemeinden YouTube neu verbinden.
 
 ---
 
@@ -197,7 +204,9 @@ DATABASE_URL=mysql://BENUTZER:PASSWORT@HOST:3306/DATENBANK
 SESSION_SECRET=...                 # zufällig, mind. 32 Zeichen
 ENCRYPTION_KEY=...                 # zufällig, mind. 32 Zeichen – NIE mehr ändern!
 WORKER_TOKEN=...                   # zufällig, mind. 32 Zeichen – gleicher Wert beim Worker
-# PCO_/GOOGLE_CLIENT_ID/SECRET leer lassen – die Gemeinden tragen ihre eigenen im Webinterface ein
+# PCO_CLIENT_ID/SECRET leer lassen – die Gemeinden tragen ihre eigenen im Webinterface ein
+GOOGLE_CLIENT_ID=...               # Google-App für alle Gemeinden, siehe 4.
+GOOGLE_CLIENT_SECRET=...
 ENABLE_MOCK_PLANNING=false
 RUN_SCHEDULER=true
 # Optional: OPENSTACK_* / WORKER_SERVER_* – Worker-Server nur bei Bedarf starten, siehe 6.4

@@ -19,7 +19,7 @@ export function OAuthAppCard({
   instructions,
   warning,
 }: {
-  provider: 'pco' | 'youtube';
+  provider: 'pco';
   title: string;
   status: OAuthAppStatus;
   onChanged: () => void;

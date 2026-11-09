@@ -43,7 +43,9 @@ integrationsRouter.get('/api/integrations/streaming/:provider/connect', requireP
   const provider = getStreamingProvider(String(req.params.provider));
   const app = await resolveApp(tid(req), provider.key);
   if (!app) {
-    res.redirect(`/settings/livestream?error=${encodeURIComponent(`Bitte zuerst die ${provider.label}-API-Zugangsdaten (Client ID / Secret) eintragen.`)}`);
+    res.redirect(
+      `/settings/livestream?error=${encodeURIComponent(`Für ${provider.label} sind auf dem Server noch keine API-Zugangsdaten hinterlegt. Bitte den Betreiber von kahal.tools kontaktieren.`)}`,
+    );
     return;
   }
   const state = await createOAuthState(res, { purpose: 'streaming', provider: provider.key, tenantId: tid(req) });
