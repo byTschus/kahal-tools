@@ -55,9 +55,10 @@ function AuthShell({ children, wide }: { children: ReactNode; wide?: boolean }) 
           </div>
           {children}
         </div>
-        <a className="auth-legal" href="/datenschutz">
-          Datenschutz
-        </a>
+        <nav className="auth-legal" aria-label="Rechtliches">
+          <a href="/datenschutz">Datenschutz</a>
+          <a href="/impressum">Impressum</a>
+        </nav>
       </main>
     </div>
   );

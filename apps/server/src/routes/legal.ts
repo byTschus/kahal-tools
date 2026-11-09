@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { config } from '../config.js';
 
 /**
- * Öffentliche Datenschutzerklärung für die ganze Anwendung: /datenschutz (Alias /privacy).
- * Serverseitig gerendert, damit sie ohne Anmeldung und ohne JavaScript erreichbar ist
+ * Öffentliche rechtliche Seiten für die ganze Anwendung: /datenschutz (Alias /privacy) und /impressum (Alias /imprint).
+ * Serverseitig gerendert, damit sie ohne Anmeldung und ohne JavaScript erreichbar sind
  * (wird u.a. bei der Google-Prüfung und in der Planning-Center-App verlinkt).
  * Angaben zum Betreiber kommen aus der .env (LEGAL_NAME, LEGAL_ADDRESS, LEGAL_EMAIL).
  */
@@ -14,21 +14,15 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 /** Stand der Erklärung – bei inhaltlichen Änderungen anpassen */
 const UPDATED = '9. November 2026';
 
-function page() {
-  const { name, address, email } = config.legal;
-  const operator = name
-    ? `<p><b>${esc(name)}</b>${address ? `<br>${esc(address).replace(/\n/g, '<br>')}` : ''}${email ? `<br>E-Mail: <a href="mailto:${esc(email)}">${esc(email)}</a>` : ''}</p>`
-    : `<p class="todo">Angaben zum Betreiber fehlen: bitte <code>LEGAL_NAME</code>, <code>LEGAL_ADDRESS</code> und <code>LEGAL_EMAIL</code> in der Server-.env setzen.</p>`;
-  const contact = email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : 'den oben genannten Betreiber';
-  const host = esc(new URL(config.appUrl).host);
-
+/** Gemeinsame Hülle der rechtlichen Seiten */
+function shell(title: string, description: string, content: string) {
   return `<!doctype html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Datenschutzerklärung – kahal.tools</title>
-<meta name="description" content="Datenschutzerklärung von kahal.tools: welche Daten verarbeitet werden, wozu und wo.">
+<title>${title} – kahal.tools</title>
+<meta name="description" content="${description}">
 <style>
   :root { color-scheme: light dark; --bg: #f6f7f5; --card: #fff; --text: #1d2420; --muted: #5d6a63; --accent: #1f6f5c; --line: #dfe5e1; }
   @media (prefers-color-scheme: dark) { :root { --bg: #111513; --card: #181d1a; --text: #e8efe9; --muted: #9aa8a0; --accent: #5cb59b; --line: #2a322e; } }
@@ -45,6 +39,7 @@ function page() {
   li { margin: 4px 0; }
   a { color: var(--accent); }
   .muted { color: var(--muted); }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; gap: 18px; font-size: 0.9rem; }
   .todo { padding: 10px 14px; border-radius: 8px; background: #fff3cd; color: #664d03; }
   code { font-size: 0.9em; }
   nav ol { padding-left: 22px; columns: 2; column-gap: 32px; }
@@ -53,7 +48,54 @@ function page() {
 </head>
 <body>
 <main>
-<header>
+${content}
+<footer><a href="/">kahal.tools</a><a href="/datenschutz">Datenschutz</a><a href="/impressum">Impressum</a></footer>
+</main>
+</body>
+</html>`;
+}
+
+/** Name, Adresse und E-Mail des Betreibers als HTML (oder Hinweis, dass die Angaben fehlen) */
+function operatorBlock() {
+  const { name, address, email } = config.legal;
+  return name
+    ? `<p><b>${esc(name)}</b>${address ? `<br>${esc(address).replace(/\n/g, '<br>')}` : ''}${email ? `<br>E-Mail: <a href="mailto:${esc(email)}">${esc(email)}</a>` : ''}</p>`
+    : `<p class="todo">Angaben zum Betreiber fehlen: bitte <code>LEGAL_NAME</code>, <code>LEGAL_ADDRESS</code> und <code>LEGAL_EMAIL</code> in der Server-.env setzen.</p>`;
+}
+
+function impressum() {
+  return shell(
+    'Impressum',
+    'Impressum von kahal.tools',
+    `<header>
+  <a href="/">kahal.tools</a>
+  <h1>Impressum</h1>
+</header>
+
+<h2>Betreiber und verantwortlich für den Inhalt</h2>
+${operatorBlock()}
+
+<h2>Angebot</h2>
+<p>kahal.tools ist eine Webanwendung für Kirchgemeinden zur Planung von Livestreams, zur Veröffentlichung von Podcasts und zur Erfassung von Besucherzahlen. Für die Inhalte, die eine Gemeinde damit erstellt und veröffentlicht (z.B. Livestreams, Podcast-Episoden), ist die jeweilige Gemeinde verantwortlich.</p>
+
+<h2>Haftung für Links</h2>
+<p>Diese Website enthält Links zu Websites Dritter (z.B. Planning Center, YouTube). Für deren Inhalte sind ausschliesslich die jeweiligen Anbieter verantwortlich.</p>
+
+<h2>Marken</h2>
+<p>Planning Center ist eine Marke von Planning Center Online, Inc. YouTube und Google sind Marken der Google LLC. kahal.tools steht in keiner Verbindung zu diesen Unternehmen und wird von ihnen weder unterstützt noch geprüft.</p>
+
+<h2>Datenschutz</h2>
+<p>Wie Personendaten bearbeitet werden, steht in der <a href="/datenschutz">Datenschutzerklärung</a>.</p>`,
+  );
+}
+
+function page() {
+  const { email } = config.legal;
+  const operator = operatorBlock();
+  const contact = email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : 'den oben genannten Betreiber';
+  const host = esc(new URL(config.appUrl).host);
+
+  return shell('Datenschutzerklärung', 'Datenschutzerklärung von kahal.tools: welche Daten verarbeitet werden, wozu und wo.', `<header>
   <a href="/">kahal.tools</a>
   <h1>Datenschutzerklärung</h1>
   <p class="muted">Stand: ${UPDATED}</p>
@@ -155,12 +197,13 @@ ${operator}
 
 <h2 id="rechte">10. Deine Rechte</h2>
 <p>Du kannst Auskunft über deine Daten verlangen sowie deren Berichtigung, Löschung, Herausgabe oder die Einschränkung der Bearbeitung. Wende dich dafür an ${contact} oder an einen Administrator deiner Gemeinde. Du hast zudem das Recht, dich beim Eidgenössischen Datenschutz- und Öffentlichkeitsbeauftragten (<a href="https://www.edoeb.admin.ch" rel="noopener">EDÖB</a>) oder, im EU-Raum, bei der zuständigen Aufsichtsbehörde zu beschweren.</p>
-<p>Wird diese Erklärung geändert, gilt die hier veröffentlichte Fassung.</p>
-</main>
-</body>
-</html>`;
+<p>Wird diese Erklärung geändert, gilt die hier veröffentlichte Fassung.</p>`);
 }
 
 legalRouter.get(['/datenschutz', '/privacy'], (_req, res) => {
   res.type('html').send(page());
+});
+
+legalRouter.get(['/impressum', '/imprint'], (_req, res) => {
+  res.type('html').send(impressum());
 });

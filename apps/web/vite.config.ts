@@ -16,6 +16,8 @@ export default defineConfig({
       '/embed': { target },
       '/datenschutz': { target },
       '/privacy': { target },
+      '/impressum': { target },
+      '/imprint': { target },
     },
   },
   build: {
