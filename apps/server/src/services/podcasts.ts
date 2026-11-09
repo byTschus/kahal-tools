@@ -117,6 +117,16 @@ function duration(sec: number) {
   return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
+/**
+ * Beschreibung im Feed: Sprecher zuerst (so zeigen Podcast-Apps ihn in der Episodenliste an),
+ * danach die Beschreibung, sofern sie den Sprecher nicht schon enthält.
+ */
+function episodeText(e: Podcast) {
+  const description = e.description?.trim() ?? '';
+  if (!e.speaker || description.includes(e.speaker)) return description;
+  return description ? `${e.speaker}\n${description}` : e.speaker;
+}
+
 export function feedUrl(tenant: Pick<Tenant, 'slug'>) {
   return `${config.appUrl}/feeds/${tenant.slug}/podcast.xml`;
 }
@@ -135,8 +145,8 @@ export async function buildFeed(tenant: Tenant): Promise<string> {
     .map(
       (e) => `    <item>
       <title>${esc(e.title)}</title>
-      <description>${esc(e.description ?? '')}</description>
-      <itunes:summary>${esc(e.description ?? '')}</itunes:summary>
+      <description>${esc(episodeText(e))}</description>
+      <itunes:summary>${esc(episodeText(e))}</itunes:summary>
       ${e.speaker ? `<itunes:author>${esc(e.speaker)}</itunes:author>` : ''}
       <enclosure url="${esc(e.audioUrl ?? '')}" length="${e.fileSize ?? 0}" type="audio/mpeg"/>
       <guid isPermaLink="false">${e.id}</guid>

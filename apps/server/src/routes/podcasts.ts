@@ -96,6 +96,9 @@ podcastsRouter.post('/api/podcasts/prepare', requirePerm('podcast', 'create'), a
     scripture: render(settings.scriptureTemplate, vars, opts).trim(),
     description: render(settings.descriptionTemplate, vars, opts).trim(),
     imageUrl: render(settings.imageTemplate, vars, opts).trim() || settings.feed.imageUrl,
+    /** Zur Auswahl beim Erstellen: Bild aus dem Plan (Vorlage) oder Bild des Podcast-Kanals */
+    planImageUrl: render(settings.imageTemplate, vars, opts).trim(),
+    channelImageUrl: settings.feed.imageUrl,
   });
 });
 

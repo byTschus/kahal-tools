@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowLeftToLine, ArrowRightToLine, Check, Lock, Mic, Play, S
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EventPicker } from '../components/EventPicker';
-import { Alert, Badge, Button, Card, Empty, Field, Modal, PageHeader, Spinner } from '../components/ui';
+import { Alert, Badge, Button, Card, Empty, Field, Modal, PageHeader, Spinner, Tabs } from '../components/ui';
 import { YouTubePlayer, type PlayerHandle } from '../components/YouTubePlayer';
 import { api, useAction, useApi } from '../lib/api';
 import { fmtDate, fmtDuration, parseDuration } from '../lib/format';
@@ -21,7 +21,11 @@ interface Prepared {
   scripture: string;
   description: string;
   imageUrl: string;
+  planImageUrl: string;
+  channelImageUrl: string;
 }
+
+type ImageChoice = 'plan' | 'channel' | 'custom';
 
 export function PodcastCreatePage() {
   const [video, setVideo] = useState<Broadcast | null>(null);
@@ -96,6 +100,7 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
   const [range, setRange] = useState<[number, number]>([0, 0]);
   const [form, setForm] = useState({ title: '', speaker: '', scripture: '', description: '', imageUrl: '' });
   const [pickEvent, setPickEvent] = useState(false);
+  const [imageChoice, setImageChoice] = useState<ImageChoice>('plan');
   const prep = useAction();
   const save = useAction();
 
@@ -104,6 +109,7 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
     if (!res) return;
     setPrepared(res);
     setForm({ title: res.title, speaker: res.speaker, scripture: res.scripture, description: res.description, imageUrl: res.imageUrl });
+    setImageChoice(res.planImageUrl ? 'plan' : res.channelImageUrl ? 'channel' : 'custom');
     if (res.video.durationSec) {
       setDuration((d) => d || res.video.durationSec!);
       setRange((r) => (r[1] ? r : [0, res.video.durationSec!]));
@@ -128,6 +134,12 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
 
   // Der Plan muss gewählt und noch keinem anderen Podcast zugeordnet sein
   const planOk = Boolean(prepared?.event && !prepared.eventLinkedTo);
+
+  const chooseImage = (choice: ImageChoice) => {
+    setImageChoice(choice);
+    if (choice === 'plan') setForm((f) => ({ ...f, imageUrl: prepared?.planImageUrl ?? '' }));
+    if (choice === 'channel') setForm((f) => ({ ...f, imageUrl: prepared?.channelImageUrl ?? '' }));
+  };
 
   const submit = async () => {
     const res = await save.run(() =>
@@ -229,10 +241,27 @@ function PodcastEditor({ video, onBack }: { video: Broadcast; onBack: () => void
             <Field label="Beschreibung">
               <textarea className="prose" rows={6} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </Field>
-            <Field label="Bild-URL">
-              <div className="row" style={{ flexWrap: 'nowrap' }}>
-                {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6 }} />}
-                <input type="text" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+            <Field label="Bild der Episode">
+              <div className="stack" style={{ gap: 8 }}>
+                <Tabs
+                  tabs={[
+                    ...(prepared.planImageUrl ? [{ key: 'plan' as const, label: 'Bild aus Plan' }] : []),
+                    ...(prepared.channelImageUrl ? [{ key: 'channel' as const, label: 'Kanalbild' }] : []),
+                    { key: 'custom' as const, label: 'Eigene URL' },
+                  ]}
+                  value={imageChoice}
+                  onChange={chooseImage}
+                />
+                <div className="row" style={{ flexWrap: 'nowrap' }}>
+                  {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, flex: 'none' }} />}
+                  {imageChoice === 'custom' ? (
+                    <input type="text" value={form.imageUrl} placeholder="https://…" onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+                  ) : (
+                    <small className="muted" style={{ wordBreak: 'break-all' }}>
+                      {imageChoice === 'plan' ? 'Serienbild bzw. Bild gemäss Vorlage in den Podcast-Einstellungen' : 'Bild des Podcast-Kanals (Einstellungen → Podcast-Feed)'}
+                    </small>
+                  )}
+                </div>
               </div>
             </Field>
             <Alert>{save.error}</Alert>
