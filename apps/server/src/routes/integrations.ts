@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import { requirePerm, requireUser, tid } from '../auth/middleware.js';
 import { config } from '../config.js';
@@ -8,9 +8,8 @@ import { HttpError } from '../lib/http.js';
 import { consumeOAuthState, createOAuthState } from '../lib/session.js';
 import { getPodcastHost, listPodcastHosts, type HostConfig } from '../providers/podcastHost/index.js';
 import { getStreamingProvider, listStreamingProviders } from '../providers/streaming/index.js';
-import { can } from '../permissions.js';
 import { getIntegration, requireStreaming } from '../services/integrations.js';
-import { appStatus, deleteTenantApp, redirectUriFor, resolveApp, saveTenantApp } from '../services/oauthApps.js';
+import { redirectUriFor, resolveApp } from '../services/oauthApps.js';
 import { feedUrl } from '../services/podcasts.js';
 
 export const integrationsRouter = Router();
@@ -41,7 +40,7 @@ integrationsRouter.get('/api/integrations', requireUser, async (req, res) => {
 
 integrationsRouter.get('/api/integrations/streaming/:provider/connect', requirePerm('livestream', 'settings'), async (req, res) => {
   const provider = getStreamingProvider(String(req.params.provider));
-  const app = await resolveApp(tid(req), provider.key);
+  const app = resolveApp(provider.key);
   if (!app) {
     res.redirect(
       `/settings/livestream?error=${encodeURIComponent(`Für ${provider.label} sind auf dem Server noch keine API-Zugangsdaten hinterlegt. Bitte den Betreiber von kahal.tools kontaktieren.`)}`,
@@ -60,7 +59,7 @@ integrationsRouter.get('/api/integrations/streaming/:provider/callback', require
     const provider = getStreamingProvider(String(req.params.provider));
     if (state.purpose !== 'streaming' || state.tenantId !== tid(req) || state.provider !== provider.key) throw new Error('Ungültiger Status');
 
-    const app = await resolveApp(tid(req), provider.key);
+    const app = resolveApp(provider.key);
     if (!app) throw new Error('Zugangsdaten fehlen');
     const secrets = await provider.exchangeCode(String(req.query.code ?? ''), redirectUriFor(provider.key), app);
     const account = await provider.createClient(secrets, app, async () => {}).getAccount();
@@ -139,44 +138,8 @@ integrationsRouter.delete('/api/integrations/podcastHost', requirePerm('podcast'
   res.json({ ok: true });
 });
 
-// ----- Eigene OAuth-App-Zugangsdaten der Gemeinde (Planning Center, Google/YouTube) -----
-
-/** Wer darf welche Zugangsdaten verwalten? pco: Admins; youtube: Livestream-Einstellungen */
-function checkAppAccess(req: Request, provider: string) {
-  if (provider === 'pco') {
-    if (!req.user!.isAdmin) throw new HttpError(403, 'Nur für Administratoren');
-  } else if (provider === 'youtube') {
-    if (!can(req.perms!, 'livestream', 'settings')) throw new HttpError(403, 'Keine Berechtigung');
-  } else {
-    throw new HttpError(404, 'Unbekannter Anbieter');
-  }
-}
+// ----- Login-Link der Gemeinde -----
 
 integrationsRouter.get('/api/oauth-apps', requireUser, async (req, res) => {
-  const tenant = req.user!.tenant;
-  res.json({
-    pco: await appStatus(tenant.id, 'pco'),
-    youtube: await appStatus(tenant.id, 'youtube'),
-    loginUrl: `${config.appUrl}/login/${tenant.slug}`,
-  });
-});
-
-const appSchema = z.object({ clientId: z.string().trim().min(10, 'Client ID fehlt'), clientSecret: z.string().optional() });
-
-integrationsRouter.put('/api/oauth-apps/:provider', requireUser, async (req, res) => {
-  const provider = String(req.params.provider);
-  checkAppAccess(req, provider);
-  const body = appSchema.parse(req.body);
-  await saveTenantApp(tid(req), provider, body.clientId, body.clientSecret);
-  res.json(await appStatus(tid(req), provider));
-});
-
-integrationsRouter.delete('/api/oauth-apps/:provider', requireUser, async (req, res) => {
-  const provider = String(req.params.provider);
-  checkAppAccess(req, provider);
-  if (provider === 'pco' && !(await resolveApp(null, 'pco'))) {
-    throw new HttpError(400, 'Ohne eigene Planning-Center-Zugangsdaten könnte sich niemand mehr anmelden');
-  }
-  await deleteTenantApp(tid(req), provider);
-  res.json(await appStatus(tid(req), provider));
+  res.json({ loginUrl: `${config.appUrl}/login/${req.user!.tenant.slug}` });
 });

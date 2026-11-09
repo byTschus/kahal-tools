@@ -8,7 +8,7 @@ import { setTimeZone } from './lib/format';
 import type { Me } from './lib/types';
 import { Dashboard } from './pages/Dashboard';
 import { LivestreamPage } from './pages/LivestreamPage';
-import { LoginPage, PendingPage, SetupPage, rememberTenant } from './pages/Login';
+import { LoginPage, PendingPage, rememberTenant } from './pages/Login';
 import { PodcastCreatePage } from './pages/PodcastCreatePage';
 import { PodcastPage } from './pages/PodcastPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
@@ -16,7 +16,7 @@ import { VisitorsPage } from './pages/VisitorsPage';
 
 export function App() {
   const location = useLocation();
-  const isPublic = location.pathname === '/login' || location.pathname.startsWith('/login/') || location.pathname === '/setup';
+  const isPublic = location.pathname === '/login' || location.pathname.startsWith('/login/');
   const { data: me, error, loading, reload } = useApi<Me>(isPublic ? null : '/api/me');
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export function App() {
   if (isPublic)
     return (
       <Routes>
-        <Route path="/setup" element={<SetupPage />} />
+        <Route path="/setup" element={<Navigate to="/login" replace />} />
         <Route path="/login/:slug?" element={<LoginPage />} />
       </Routes>
     );

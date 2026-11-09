@@ -1,23 +1,20 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
-import { decryptJson, encryptJson } from '../lib/crypto.js';
+import { encryptJson } from '../lib/crypto.js';
 import { HttpError } from '../lib/http.js';
 import { clearSession, consumeOAuthState, createOAuthState, setSession } from '../lib/session.js';
 import { slugify } from '../lib/template.js';
-import { getPlanningProvider, listPlanningProviders, type OAuthAppCreds, type PlanningIdentity, type PlanningTokens } from '../providers/planning/index.js';
+import { getPlanningProvider, listPlanningProviders, type PlanningIdentity, type PlanningTokens } from '../providers/planning/index.js';
 import { MOCK_PEOPLE } from '../providers/planning/mock.js';
-import { redirectUriFor, resolveApp, saveTenantApp } from '../services/oauthApps.js';
+import { redirectUriFor, resolveApp } from '../services/oauthApps.js';
 
 export const authRouter = Router();
 
 /**
- * Login-Varianten:
- * 1. /auth/pco/login?tenant=<slug>  -> mit der eigenen OAuth-App der Gemeinde (Login-Link der Gemeinde)
- * 2. /auth/pco/login                -> mit der globalen App aus der .env (falls gesetzt)
- * 3. POST /auth/pco/setup           -> neue Gemeinde einrichten: Client ID/Secret eingeben, danach Login.
- *                                     Die Zugangsdaten werden nach erfolgreichem Login bei der Gemeinde gespeichert.
+ * Login mit der gemeinsamen OAuth-App aus der .env (PCO_CLIENT_ID / PCO_CLIENT_SECRET):
+ * 1. /auth/pco/login                -> Gemeinde wird am Planning-Center-Konto erkannt; neue Gemeinden werden angelegt
+ * 2. /auth/pco/login?tenant=<slug>  -> Login-Link einer Gemeinde (prüft zusätzlich, dass das Konto dazugehört)
  */
 
 authRouter.get('/auth/providers', (_req, res) => {
@@ -26,7 +23,7 @@ authRouter.get('/auth/providers', (_req, res) => {
 
 /** Öffentliche Infos für die Login-Seite einer Gemeinde */
 authRouter.get('/auth/tenant/:slug', async (req, res) => {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: String(req.params.slug) }, include: { oauthApps: { select: { provider: true } } } });
+  const tenant = await prisma.tenant.findUnique({ where: { slug: String(req.params.slug) } });
   if (!tenant) throw new HttpError(404, 'Gemeinde nicht gefunden');
   const provider = getPlanningProvider(tenant.planningProvider);
   res.json({
@@ -34,7 +31,7 @@ authRouter.get('/auth/tenant/:slug', async (req, res) => {
     slug: tenant.slug,
     avatarUrl: tenant.avatarUrl,
     provider: { key: provider.key, label: provider.label },
-    ready: !provider.requiresApp || tenant.oauthApps.some((a) => a.provider === provider.key) || Boolean(await resolveApp(null, provider.key)),
+    ready: !provider.requiresApp || Boolean(resolveApp(provider.key)),
   });
 });
 
@@ -48,23 +45,13 @@ authRouter.get('/auth/:provider/login', async (req, res) => {
     res.redirect(`/login?error=${encodeURIComponent('Gemeinde nicht gefunden')}`);
     return;
   }
-  const app = provider.requiresApp ? await resolveApp(tenant?.id ?? null, provider.key) : null;
+  const app = provider.requiresApp ? resolveApp(provider.key) : null;
   if (provider.requiresApp && !app) {
-    res.redirect(`${loginPage(slug)}?error=${encodeURIComponent(`Für ${provider.label} sind noch keine Zugangsdaten hinterlegt. Neue Gemeinde? Bitte „Gemeinde einrichten“ wählen.`)}`);
+    res.redirect(`${loginPage(slug)}?error=${encodeURIComponent(`Für ${provider.label} sind auf dem Server noch keine Zugangsdaten hinterlegt. Bitte den Betreiber von kahal.tools kontaktieren.`)}`);
     return;
   }
   const state = await createOAuthState(res, { purpose: 'login', provider: provider.key, ...(slug ? { tenant: slug } : {}) });
   res.redirect(provider.getAuthorizeUrl(state, redirectUriFor(provider.key), app));
-});
-
-const setupSchema = z.object({ clientId: z.string().trim().min(10, 'Client ID fehlt'), clientSecret: z.string().trim().min(10, 'Secret fehlt') });
-
-/** Neue Gemeinde einrichten: eigene OAuth-App-Zugangsdaten, danach Login beim Planungstool */
-authRouter.post('/auth/:provider/setup', async (req, res) => {
-  const provider = getPlanningProvider(String(req.params.provider));
-  const app = setupSchema.parse(req.body);
-  const state = await createOAuthState(res, { purpose: 'setup', provider: provider.key, app: encryptJson(app) });
-  res.json({ url: provider.getAuthorizeUrl(state, redirectUriFor(provider.key), app) });
 });
 
 // Auswahlseite für den Demo-Login (nur lokal)
@@ -89,14 +76,13 @@ authRouter.get('/auth/:provider/callback', async (req, res) => {
   try {
     const state = await consumeOAuthState(req, res, req.query.state);
     if (state.tenant) back = loginPage(state.tenant);
-    if (state.purpose === 'setup') back = '/setup';
     if (req.query.error) return fail(String(req.query.error_description ?? req.query.error));
     const provider = getPlanningProvider(String(req.params.provider));
-    if (!['login', 'setup'].includes(state.purpose) || state.provider !== provider.key) return fail('Ungültiger Login-Status');
+    if (state.purpose !== 'login' || state.provider !== provider.key) return fail('Ungültiger Login-Status');
 
     const tenant = state.tenant ? await prisma.tenant.findUnique({ where: { slug: state.tenant } }) : null;
-    const setupApp = state.purpose === 'setup' ? decryptJson<OAuthAppCreds>(state.app) : null;
-    const app = provider.requiresApp ? (setupApp ?? (await resolveApp(tenant?.id ?? null, provider.key))) : null;
+    const app = provider.requiresApp ? resolveApp(provider.key) : null;
+    if (provider.requiresApp && !app) return fail('Zugangsdaten fehlen');
 
     const tokens = await provider.exchangeCode(String(req.query.code ?? ''), redirectUriFor(provider.key), app);
     const identity = await provider.createClient(tokens).getIdentity();
@@ -104,23 +90,7 @@ authRouter.get('/auth/:provider/callback', async (req, res) => {
     if (tenant && tenant.externalOrgId !== identity.org.externalId) {
       return fail(identity.org.name ? `Dieses ${provider.label}-Konto gehört zu „${identity.org.name}“, nicht zu „${tenant.name}“.` : `Dieses ${provider.label}-Konto gehört nicht zu „${tenant.name}“.`);
     }
-    if (setupApp) {
-      const existing = await prisma.tenant.findUnique({
-        where: { planningProvider_externalOrgId: { planningProvider: provider.key, externalOrgId: identity.org.externalId } },
-      });
-      if (existing) {
-        const admin = await prisma.user.findFirst({
-          where: { tenantId: existing.id, externalPersonId: identity.person.externalId, isAdmin: true, status: 'active' },
-        });
-        if (!admin) {
-          back = loginPage(existing.slug);
-          return fail(`„${existing.name}“ ist bereits eingerichtet. Bitte über diesen Login-Link anmelden; Zugangsdaten kann nur ein Administrator ändern.`);
-        }
-      }
-    }
-
     const user = await loginUser(provider.key, identity, tokens);
-    if (setupApp) await saveTenantApp(user.tenantId, provider.key, setupApp.clientId, setupApp.clientSecret);
     await setSession(res, { uid: user.id, tid: user.tenantId });
     res.redirect(user.status === 'active' ? '/' : '/pending');
   } catch (err) {

@@ -1,10 +1,9 @@
-import { ArrowLeft, ArrowRight, Mic, Plus, Radio, Users } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Mic, Radio, Users } from 'lucide-react';
+import { type ReactNode } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Brand } from '../components/Brand';
-import { CopyField } from '../components/CopyField';
-import { Alert, Avatar, Button, Field, Spinner } from '../components/ui';
-import { api, useAction, useApi } from '../lib/api';
+import { Alert, Avatar, Button, Spinner } from '../components/ui';
+import { api, useApi } from '../lib/api';
 import type { Me } from '../lib/types';
 
 const LAST_TENANT_KEY = 'kahal.lastTenant';
@@ -14,14 +13,6 @@ export function rememberTenant(slug: string) {
     localStorage.setItem(LAST_TENANT_KEY, slug);
   } catch {
     /* ignorieren */
-  }
-}
-
-function lastTenant() {
-  try {
-    return localStorage.getItem(LAST_TENANT_KEY);
-  } catch {
-    return null;
   }
 }
 
@@ -121,7 +112,9 @@ function TenantLogin({ slug }: { slug: string }) {
               Mit {tenant.provider.label} anmelden <ArrowRight size={16} />
             </a>
           ) : (
-            <Alert kind="warning">Für diese Gemeinde sind keine {tenant.provider.label}-Zugangsdaten hinterlegt. Bitte wende dich an einen Administrator.</Alert>
+            <Alert kind="warning">
+              Auf dem Server sind noch keine {tenant.provider.label}-Zugangsdaten hinterlegt. Bitte den Betreiber von kahal.tools kontaktieren.
+            </Alert>
           )}
           <small>
             Nicht deine Gemeinde? <Link to="/login">Andere Gemeinde wählen</Link>
@@ -134,98 +127,31 @@ function TenantLogin({ slug }: { slug: string }) {
 
 function GenericLogin() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const { data: providers, loading } = useApi<Provider[]>('/auth/providers');
-  const [slug, setSlug] = useState(lastTenant() ?? '');
+  const available = providers?.filter((p) => p.globalApp) ?? [];
 
   return (
     <AuthShell>
       <h1>Anmelden</h1>
-      <p className="lead">Gib das Kürzel deiner Gemeinde ein. Du findest es im Login-Link, den du erhalten hast.</p>
+      <p className="lead">Melde dich mit deinem Planning-Center-Konto an. Deine Gemeinde wird dabei automatisch erkannt.</p>
       <Alert>{params.get('error')}</Alert>
       {loading ? (
         <Spinner />
+      ) : available.length ? (
+        <div className="stack">
+          {available.map((p, i) => (
+            <a key={p.key} className={`btn large block ${i === 0 ? 'primary' : ''}`} href={`/auth/${p.key}/login`}>
+              Mit {p.label} anmelden <ArrowRight size={16} />
+            </a>
+          ))}
+          <small>
+            Ist deine Gemeinde noch nicht bei kahal.tools, wird sie bei der ersten Anmeldung eingerichtet und du wirst Administrator. Weitere Personen lädt ein
+            Administrator ein oder schaltet sie nach der Anmeldung frei.
+          </small>
+        </div>
       ) : (
-        <>
-          <form
-            className="stack"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (slug.trim()) navigate(`/login/${encodeURIComponent(slug.trim().toLowerCase())}`);
-            }}
-          >
-            <Field label="Gemeinde-Kürzel">
-              <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="meine-gemeinde" autoFocus />
-            </Field>
-            <Button variant="primary" size="large" className="block" disabled={!slug.trim()}>
-              Weiter <ArrowRight size={16} />
-            </Button>
-          </form>
-          {providers
-            ?.filter((p) => p.globalApp)
-            .map((p) => (
-              <a key={p.key} className="btn large block" href={`/auth/${p.key}/login`}>
-                Mit {p.label} anmelden
-              </a>
-            ))}
-          <div className="divider">Neu hier?</div>
-          <Link to="/setup" className="btn large block">
-            <Plus size={16} /> Gemeinde einrichten
-          </Link>
-        </>
+        <Alert kind="warning">Auf dem Server sind noch keine Planning-Center-Zugangsdaten hinterlegt. Bitte den Betreiber von kahal.tools kontaktieren.</Alert>
       )}
-    </AuthShell>
-  );
-}
-
-/** Erste Einrichtung einer Gemeinde: eigene Planning-Center-App-Zugangsdaten eingeben, danach anmelden */
-export function SetupPage() {
-  const [params] = useSearchParams();
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const action = useAction();
-  const redirectUri = `${window.location.origin}/auth/pco/callback`;
-
-  const submit = async () => {
-    const res = await action.run(() => api.post<{ url: string }>('/auth/pco/setup', { clientId, clientSecret }));
-    if (res) window.location.href = res.url;
-  };
-
-  return (
-    <AuthShell wide>
-      <Link to="/login" className="meta">
-        <ArrowLeft size={15} /> Zurück
-      </Link>
-      <h1>Gemeinde einrichten</h1>
-      <p className="lead">Verbinde kahal.tools mit dem Planning Center deiner Gemeinde. Das dauert etwa fünf Minuten.</p>
-      <Alert>{params.get('error') ?? action.error}</Alert>
-      <ol className="steps">
-        <li>
-          In Planning Center anmelden und{' '}
-          <a href="https://api.planningcenteronline.com/oauth/applications" target="_blank" rel="noreferrer">
-            OAuth Applications
-          </a>{' '}
-          öffnen.
-        </li>
-        <li>„New Application“ wählen, Name z.B. „kahal.tools“.</li>
-        <li>Diese Adresse als Callback-URL eintragen:</li>
-      </ol>
-      <CopyField value={redirectUri} />
-      <ol className="steps" start={4}>
-        <li>Speichern und Client ID sowie Secret hier eintragen.</li>
-      </ol>
-      <Field label="Client ID">
-        <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete="off" />
-      </Field>
-      <Field label="Secret">
-        <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="new-password" />
-      </Field>
-      <Button variant="primary" size="large" busy={action.busy} disabled={!clientId || !clientSecret} onClick={submit}>
-        Weiter zu Planning Center <ArrowRight size={16} />
-      </Button>
-      <small>
-        Deine Gemeinde wird anhand deines Planning-Center-Kontos erkannt, und du wirst Administrator. Die Zugangsdaten werden verschlüsselt gespeichert.
-      </small>
     </AuthShell>
   );
 }

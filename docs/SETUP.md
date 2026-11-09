@@ -4,7 +4,7 @@ Diese Anleitung beschreibt alles, was **von Hand** gemacht werden muss. Reihenfo
 
 1. [GitHub-Repository anlegen und Code hochladen](#1-github-repository)
 2. [Lokale Entwicklungsumgebung (VS Code + Docker)](#2-lokale-entwicklungsumgebung)
-3. [Planning Center: OAuth-App pro Gemeinde](#3-planning-center-oauth-app-pro-gemeinde)
+3. [Planning Center: OAuth-App (einmal für alle Gemeinden)](#3-planning-center-oauth-app-einmal-für-alle-gemeinden)
 4. [Google / YouTube: API-Zugang (einmal für alle Gemeinden)](#4-google--youtube-api-einmal-für-alle-gemeinden)
 5. [Infomaniak: Node.js-Hosting + Datenbank](#5-infomaniak-nodejs-hosting)
 6. [Infomaniak Public Cloud: Podcast-Worker](#6-infomaniak-public-cloud-podcast-worker)
@@ -83,28 +83,33 @@ Trage die Zugangsdaten aus Schritt 3 und 4 in die `.env` ein und registriere zus
 
 ---
 
-## 3. Planning Center: OAuth-App pro Gemeinde
+## 3. Planning Center: OAuth-App (einmal für alle Gemeinden)
 
-Jede Gemeinde verwendet **ihre eigene** Planning-Center-OAuth-App. Die Zugangsdaten werden **im Webinterface** eingegeben und verschlüsselt pro Gemeinde gespeichert – auf dem Server muss dafür nichts konfiguriert werden.
+Die Planning-Center-Zugangsdaten werden **einmal vom Betreiber** in der Server-`.env` hinterlegt und gelten für alle Gemeinden. Gemeinden tragen nichts ein.
 
-### Neue Gemeinde einrichten (einmalig, durch die erste Person der Gemeinde)
-
-1. kahal.tools öffnen → **„Neue Gemeinde einrichten“**.
-2. In einem neuen Tab mit dem Planning-Center-Konto anmelden und <https://api.planningcenteronline.com/oauth/applications> öffnen.
-3. **New Application** → Name `kahal.tools` (optional Beschreibung/Logo).
-4. Als **Callback URL / Redirect URI** die Adresse eintragen, die auf der Einrichtungsseite angezeigt wird:
+1. Mit einem Planning-Center-Konto anmelden und <https://api.planningcenteronline.com/oauth/applications> öffnen.
+2. **New Application** → Name `kahal.tools` (optional Beschreibung, Logo und Link zur Datenschutzerklärung `https://tools.deine-domain.ch/datenschutz`).
+3. Als **Callback URL / Redirect URI** eintragen:
    `https://tools.deine-domain.ch/auth/pco/callback`
    (für die lokale Entwicklung zusätzlich `http://localhost:5173/auth/pco/callback`)
-5. Speichern, **Client ID** und **Secret** in kahal.tools eintragen → **Weiter zur Anmeldung bei Planning Center** → Zugriff erlauben.
-6. Die Gemeinde wird anhand des PCO-Kontos erkannt und angelegt, du bist **Administrator**.
+4. **Client ID** und **Secret** in die Server-`.env` eintragen und den Server neu starten:
 
-Danach findest du unter **Einstellungen → Planungstool** den **Login-Link der Gemeinde** (`https://tools.deine-domain.ch/login/<kürzel>`). Diesen an alle Mitarbeitenden weitergeben – darüber melden sie sich mit ihrem eigenen PCO-Konto an. Dort lassen sich die Zugangsdaten auch später ändern.
+   ```
+   PCO_CLIENT_ID=…
+   PCO_CLIENT_SECRET=…
+   ```
+
+### Neue Gemeinde
+
+Die erste Person einer Gemeinde öffnet kahal.tools und klickt **„Mit Planning Center anmelden“**. Die Gemeinde wird am Planning-Center-Konto erkannt und automatisch angelegt, diese Person wird **Administrator**.
+
+Danach findest du unter **Einstellungen → Planungstool** den **Login-Link der Gemeinde** (`https://tools.deine-domain.ch/login/<kürzel>`). Diesen an alle Mitarbeitenden weitergeben. Weitere Personen lädt ein Administrator ein, oder sie melden sich selbst an und werden freigeschaltet.
 
 Benötigte Rechte (werden beim Login abgefragt): `people` (Person & Gemeinde erkennen, Personen zum Einladen suchen) und `services` (Pläne, Teams, Items).
 
-> **Schutz:** Wer sich über den Login-Link einer Gemeinde anmeldet, muss in Planning Center auch zu dieser Organisation gehören. Ist eine Gemeinde bereits eingerichtet, kann nur ein Administrator ihre Zugangsdaten ändern.
+> **Schutz:** Jede Person landet in der Gemeinde ihres Planning-Center-Kontos. Wer sich über den Login-Link einer Gemeinde anmeldet, muss in Planning Center auch zu dieser Organisation gehören. Unbekannte Personen einer bestehenden Gemeinde müssen von einem Administrator freigeschaltet werden.
 
-> **Optional – globale App:** Wer kahal.tools für viele Gemeinden betreibt, kann stattdessen *eine* App in der Server-`.env` hinterlegen (`PCO_CLIENT_ID` / `PCO_CLIENT_SECRET`). Sie gilt für alle Gemeinden ohne eigene Zugangsdaten; auf der Login-Seite erscheint dann zusätzlich „Mit Planning Center anmelden (ohne Kürzel)“.
+> **Umstellung:** Gemeinden, die früher eigene Zugangsdaten eingetragen hatten, funktionieren weiter. Bei der nächsten Anmeldung läuft der Login über die gemeinsame App.
 
 ---
 
@@ -204,7 +209,8 @@ DATABASE_URL=mysql://BENUTZER:PASSWORT@HOST:3306/DATENBANK
 SESSION_SECRET=...                 # zufällig, mind. 32 Zeichen
 ENCRYPTION_KEY=...                 # zufällig, mind. 32 Zeichen – NIE mehr ändern!
 WORKER_TOKEN=...                   # zufällig, mind. 32 Zeichen – gleicher Wert beim Worker
-# PCO_CLIENT_ID/SECRET leer lassen – die Gemeinden tragen ihre eigenen im Webinterface ein
+PCO_CLIENT_ID=...                  # Planning-Center-App für alle Gemeinden, siehe 3.
+PCO_CLIENT_SECRET=...
 GOOGLE_CLIENT_ID=...               # Google-App für alle Gemeinden, siehe 4.
 GOOGLE_CLIENT_SECRET=...
 ENABLE_MOCK_PLANNING=false
@@ -355,7 +361,7 @@ Ab jetzt: Podcast erstellen → Instanz startet (ca. 1 Minute) → Docker starte
 
 ## 7. Erste Schritte im Tool
 
-1. <https://tools.deine-domain.ch> öffnen → **Neue Gemeinde einrichten** (siehe [Abschnitt 3](#3-planning-center-oauth-app-pro-gemeinde)). Du bist als erste Person deiner Gemeinde automatisch **Administrator**.
+1. <https://tools.deine-domain.ch> öffnen → **Mit Planning Center anmelden** (siehe [Abschnitt 3](#3-planning-center-oauth-app-einmal-für-alle-gemeinden)). Du bist als erste Person deiner Gemeinde automatisch **Administrator**.
 2. **Einstellungen → Planungstool:** Login-Link der Gemeinde kopieren und weitergeben, Service Types auswählen.
 3. **Einstellungen → Livestream:** Google-Zugangsdaten eintragen ([Abschnitt 4](#4-google--youtube-api-pro-gemeinde)), dann **Mit YouTube verbinden**. Danach Vorlagen, Startzeit-Item (z.B. „Livestream“), Streamschlüssel und Playlist einstellen.
    * Beim Erstellen eines Livestreams lassen sich eine **Playlist** wählen (oder direkt eine neue erstellen) und ein **Thumbnail** setzen: das Bild aus dem Plan (Vorlage „Thumbnail-Vorschlag“, z.B. `{{series.artwork}}`) oder ein eigenes Bild. Eigene Thumbnails erlaubt YouTube nur für bestätigte Kanäle: einmalig unter <https://www.youtube.com/verify> per SMS bestätigen.
@@ -419,7 +425,7 @@ Server und Worker immer zusammen aktualisieren: Neue Auftragsarten (z.B. feed.xm
 
 | Problem | Lösung |
 | --- | --- |
-| Login: „Für Planning Center sind noch keine Zugangsdaten hinterlegt“ | Gemeinde noch nicht eingerichtet → „Neue Gemeinde einrichten“. Oder über den Login-Link der Gemeinde anmelden statt über die allgemeine Login-Seite. |
+| Login: „Für Planning Center sind auf dem Server noch keine Zugangsdaten hinterlegt“ | `PCO_CLIENT_ID` / `PCO_CLIENT_SECRET` in der Server-`.env` setzen und den Server neu starten (Abschnitt 3). |
 | Login: „redirect_uri mismatch“ / „invalid_client“ | Die Callback-URL in der PCO-/Google-App muss **exakt** der im Tool angezeigten Adresse entsprechen (https, ohne `/` am Ende). Client ID/Secret auf Tippfehler prüfen. |
 | Login: „Dieses Konto gehört zu …, nicht zu …“ | Das PCO-Konto gehört zu einer anderen Organisation. Mit dem richtigen Konto anmelden oder den Login-Link der eigenen Gemeinde verwenden. |
 | „… ist bereits eingerichtet“ beim Einrichten | Die Gemeinde existiert schon. Über ihren Login-Link anmelden; Zugangsdaten ändert ein Admin unter Einstellungen → Planungstool. |

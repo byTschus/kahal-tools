@@ -1,5 +1,4 @@
 import { CopyField } from '../../components/CopyField';
-import { OAuthAppCard, type OAuthAppStatus } from '../../components/OAuthAppCard';
 import { Alert, Button, Card, Checkbox, Field, Spinner , Saved } from '../../components/ui';
 import { useApi } from '../../lib/api';
 import { useMe } from '../../lib/auth';
@@ -9,7 +8,7 @@ export function PlanningSettings() {
   const { me } = useMe();
   const { data: sources, loading: loadingSources, error: sourcesError } = useApi<{ id: string; name: string }[]>('/api/planning/sources');
   const s = useSettings<{ sourceIds: string[] }>('planning');
-  const { data: apps, reload: reloadApps } = useApi<{ pco: OAuthAppStatus; loginUrl: string }>('/api/oauth-apps');
+  const { data: apps } = useApi<{ loginUrl: string }>('/api/oauth-apps');
 
   return (
     <>
@@ -27,27 +26,6 @@ export function PlanningSettings() {
           </div>
         )}
       </Card>
-      {apps && me.tenant.provider === 'pco' && (
-        <OAuthAppCard
-          provider="pco"
-          title="Planning Center API-Zugangsdaten"
-          status={apps.pco}
-          onChanged={reloadApps}
-          warning="Nach einer Änderung müssen sich alle Benutzer einmal neu anmelden."
-          instructions={
-            <ol style={{ paddingLeft: 20, margin: 0 }}>
-              <li>
-                <a href="https://api.planningcenteronline.com/oauth/applications" target="_blank" rel="noreferrer">
-                  api.planningcenteronline.com/oauth/applications
-                </a>{' '}
-                öffnen → „New Application“.
-              </li>
-              <li>Die Redirect-URL unten als Callback-URL eintragen.</li>
-              <li>Client ID und Secret hier eintragen und speichern.</li>
-            </ol>
-          }
-        />
-      )}
       <Card title="Berücksichtigte Service Types">
         <p className="muted">Welche Service Types (z.B. „Gottesdienst“, „Jugend“) sollen in den Tools zur Auswahl stehen? Ohne Auswahl werden alle angezeigt.</p>
         <Alert>{sourcesError?.message ?? s.error}</Alert>

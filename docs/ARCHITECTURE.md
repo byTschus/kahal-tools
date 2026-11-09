@@ -18,7 +18,7 @@
 
 ## Login & Benutzer
 
-0. OAuth-App-Zugangsdaten (Client ID/Secret) liegen **pro Gemeinde** verschlüsselt in der Tabelle `OAuthApp` (`services/oauthApps.ts`). Neue Gemeinde: „Gemeinde einrichten“ – die eingegebenen Zugangsdaten reisen verschlüsselt im OAuth-State mit und werden nach erfolgreichem Login gespeichert. Bestehende Gemeinde: Login-Link `/login/<slug>` → `/auth/pco/login?tenant=<slug>`. Fallback: globale App aus der `.env`. Google/YouTube verwendet ausschliesslich die globale App (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`); früher gespeicherte Google-Apps einer Gemeinde dienen nur noch zum Erneuern bestehender Tokens. Jedes Token merkt sich die `clientId` der ausstellenden App, damit es mit der richtigen App erneuert wird.
+0. OAuth-App-Zugangsdaten (Client ID/Secret) gibt es nur einmal pro Anbieter in der `.env` (`PCO_*`, `GOOGLE_*`, `services/oauthApps.ts`). Login: `/auth/pco/login` erkennt die Gemeinde am Planning-Center-Konto und legt neue Gemeinden an; der Login-Link `/login/<slug>` prüft zusätzlich die Zugehörigkeit. Jedes Token merkt sich die `clientId` der ausstellenden App; früher pro Gemeinde gespeicherte Apps (Tabelle `OAuthApp`) dienen nur noch zum Erneuern alter Tokens.
 1. „Mit Planning Center anmelden“ → OAuth → `/auth/pco/callback`
 2. Organisation + Person werden abgefragt (`/people/v2`, `/people/v2/me`)
 3. Neue Organisation → Tenant + Admin. Bekannte Organisation → eingeladene Person wird aktiv, unbekannte Person wird `pending` (Zugangsanfrage).
