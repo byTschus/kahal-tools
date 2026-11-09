@@ -19,12 +19,12 @@ export const config = {
   migrateOnStart: process.env.MIGRATE_ON_START !== 'false',
   enableMockPlanning: process.env.ENABLE_MOCK_PLANNING === 'true' && !isProduction,
   pco: {
-    clientId: process.env.PCO_CLIENT_ID ?? '',
-    clientSecret: process.env.PCO_CLIENT_SECRET ?? '',
+    clientId: (process.env.PCO_CLIENT_ID ?? '').trim(),
+    clientSecret: (process.env.PCO_CLIENT_SECRET ?? '').trim(),
   },
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    clientId: (process.env.GOOGLE_CLIENT_ID ?? '').trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? '').trim(),
   },
   /** Betreiber für die Datenschutzerklärung (/datenschutz) */
   legal: {
